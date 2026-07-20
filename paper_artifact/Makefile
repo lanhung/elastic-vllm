@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 help:
 	@echo "make data   download the Azure traces (CC-BY, ~1 MB)"
-	@echo "make sim    run E1-E7            (~7 min, CPU only, no GPU)"
+	@echo "make sim    run E1-E8            (~12 min, CPU only, no GPU)"
 	@echo "make figs   results/ -> figs/"
 	@echo "make paper  compile parked.pdf"
 	@echo "make all    everything, from nothing"
@@ -15,6 +15,7 @@ data:
 sim: data
 	cd src && for e in 1 2 3 4 5 6; do python3 run_experiments.py $$e; done
 	cd src && python3 exp7_sensitivity.py
+	cd src && python3 exp8_high_load.py
 
 figs:
 	cd src && python3 make_figs.py

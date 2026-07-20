@@ -9,9 +9,9 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 ARTIFACT = SRC.parent
 sys.path.insert(0, str(SRC))
 
-from policies import Static
+from policies import PressureAwareAdmission, Static
 from sim import Cluster, HW, SLO
-from workload import Program, Turn
+from workload import Program, Turn, build_programs
 
 
 def program(pid, cached=0, last_used=0.0):
@@ -112,11 +112,50 @@ class CacheSemanticsTest(unittest.TestCase):
         self.assertEqual(round(means["hpa-gpu"], 3), 0.935)
         self.assertEqual(round(means["kv-util"], 3), 0.931)
         self.assertEqual(round(means["park-aware"], 3), 0.909)
+        self.assertEqual(round(means["pressure-aware"], 3), 0.988)
+
+        e4 = pd.read_csv(results / "e4_scale_in_damage.csv")
+        baseline = e4[(e4["T"] > 1) & (e4.policy != "pressure-aware")]
+        evicted = baseline.evicted_tokens.sum()
+        scalein = baseline.scalein_tokens.sum()
+        self.assertEqual(round(evicted / (evicted + scalein), 4), 0.9703)
+        protected = e4[(e4["T"] > 1) &
+                       (e4.policy == "pressure-aware")]
+        self.assertEqual(int(protected.evicted_tokens.sum()), 0)
 
         e5 = pd.read_csv(results / "e5_coldstart.csv")
         measured = e5[e5.cold_start_s == 38.155].set_index("policy").slo
         self.assertEqual(round(measured["hpa-gpu"], 3), 0.997)
         self.assertEqual(round(measured["park-aware"], 3), 0.727)
+
+        e8 = pd.read_csv(results / "e8_high_load.csv")
+        high = e8[(e8.load_multiplier.isin([4, 8])) &
+                  (e8.policy == "pressure-aware")]
+        self.assertTrue((high.slo_attain == 1.0).all())
+
+    def test_load_multiplier_superposes_phase_shifted_trace_copies(self):
+        trace = pd.DataFrame({"rel_s": [0.0, 10.0],
+                              "ctx": [100, 200], "gen": [10, 20]})
+        programs = build_programs(trace, turns_per_program=1,
+                                  think_mean_s=0, horizon_s=20,
+                                  load_multiplier=4)
+
+        self.assertEqual(len(programs), 8)
+        self.assertEqual(len({p.pid for p in programs}), 8)
+        self.assertTrue(all(0 <= p.arrival_s < 20 for p in programs))
+
+    def test_pressure_admission_refuses_prefix_destructive_placement(self):
+        c = Cluster([], HW(kv_capacity=75_216), SLO(),
+                    PressureAwareAdmission(), init_replicas=1, warmup_s=0)
+        parked = program(1, cached=70_000)
+        c.parked[parked.pid] = parked
+        c.replicas[0].resident[parked.pid] = parked
+        c.replicas[0].kv_used = 70_000
+        incoming = Program(pid=2, arrival_s=0.0,
+                           turns=[Turn(prefill_tokens=10_000,
+                                       decode_tokens=1, think_s=0.0)])
+
+        self.assertIsNone(c._place(incoming, 0.0))
 
 
 if __name__ == "__main__":

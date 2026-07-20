@@ -27,7 +27,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 from workload import load_azure, build_programs, trace_stats
 from sim import Cluster, HW, SLO, recommended_drain_s
-from policies import HpaGpuUtil, KedaQueue, KvUtil, ParkAware, Static
+from policies import (HpaGpuUtil, KedaQueue, KvUtil, ParkAware,
+                      PressureAwareAdmission, Static)
 from rl_policy import QLearnScaler, PredictScaler
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -43,9 +44,11 @@ SEED = 20260720
 
 WARMUP = 300.0
 
-def simulate(df, T, tau, policy, hw=None, init_replicas=4, horizon=HORIZON):
+def simulate(df, T, tau, policy, hw=None, init_replicas=4, horizon=HORIZON,
+             load_multiplier=1):
     progs = build_programs(df, turns_per_program=T, think_mean_s=tau,
-                           seed=SEED, horizon_s=horizon)
+                           seed=SEED, horizon_s=horizon,
+                           load_multiplier=load_multiplier)
     c = Cluster(progs, hw or HW(), SLO(), policy, dt=0.5,
                 init_replicas=init_replicas, max_replicas=64,
                 warmup_s=WARMUP)
@@ -71,20 +74,23 @@ def train_rl(df, T, tau, see_parked=False, hw=None, n0=5):
     return q
 
 
-def cheapest_static(df, T, tau, hw=None, lo=1, hi=48):
+def cheapest_static(df, T, tau, hw=None, lo=1, hi=48, load_multiplier=1):
     """Smallest static N with SLO attainment >= SLO_TARGET."""
+    max_hi = hi
     best = None
     while lo <= hi:
         mid = (lo + hi) // 2
-        r, _ = simulate(df, T, tau, Static(mid), hw, init_replicas=mid)
+        r, _ = simulate(df, T, tau, Static(mid), hw, init_replicas=mid,
+                        load_multiplier=load_multiplier)
         if r.slo_attain >= SLO_TARGET:
             best = (mid, r)
             hi = mid - 1
         else:
             lo = mid + 1
     if best is None:
-        r, _ = simulate(df, T, tau, Static(48), hw, init_replicas=48)
-        best = (48, r)
+        r, _ = simulate(df, T, tau, Static(max_hi), hw, init_replicas=max_hi,
+                        load_multiplier=load_multiplier)
+        best = (max_hi, r)
     return best
 
 
@@ -158,6 +164,7 @@ def exp3_policy_sweep():
                 train_rl(df, T, tau, see_parked=False, n0=n_star),
                 train_rl(df, T, tau, see_parked=True,  n0=n_star),
                 ParkAware(target=0.70, max_batch=HW().max_batch),
+                PressureAwareAdmission(),
             ]
             for pol in policies:
                 r, _ = simulate(df, T, tau, pol, init_replicas=n_star)
@@ -183,7 +190,8 @@ def exp4_scale_in_damage():
         tau = 8.0 if T > 1 else 0.0
         n_star, _ = cheapest_static(df, T, tau)
         for pol_f in [lambda: HpaGpuUtil(), lambda: KedaQueue(),
-                      lambda: KvUtil(), lambda: ParkAware(max_batch=HW().max_batch)]:
+                      lambda: KvUtil(), lambda: ParkAware(max_batch=HW().max_batch),
+                      lambda: PressureAwareAdmission()]:
             r, _ = simulate(df, T, tau, pol_f(), init_replicas=n_star)
             rows.append(dict(T=T, tau=tau, policy=r.policy,
                              kills_evict=r.kills_evict,
@@ -211,7 +219,8 @@ def exp5_coldstart_sensitivity():
         hw = HW(cold_start_s=cs)
         for pol_f in [lambda: HpaGpuUtil(), lambda: KedaQueue(),
                       lambda: PredictScaler(horizon_s=cs, max_batch=hw.max_batch),
-                      lambda: ParkAware(max_batch=hw.max_batch)]:
+                      lambda: ParkAware(max_batch=hw.max_batch),
+                      lambda: PressureAwareAdmission()]:
             r, _ = simulate(df, 8, 8.0, pol_f(), hw=hw)
             rows.append(dict(cold_start_s=cs, policy=r.policy,
                              slo=r.slo_attain, gpu_s=r.gpu_seconds,
@@ -232,7 +241,8 @@ def exp6_workload_contrast():
         for T, tau in [(1, 0.0), (8, 8.0)]:
             for pol_f in [lambda: HpaGpuUtil(), lambda: KedaQueue(),
                           lambda: KvUtil(),
-                          lambda: ParkAware(max_batch=HW().max_batch)]:
+                          lambda: ParkAware(max_batch=HW().max_batch),
+                          lambda: PressureAwareAdmission()]:
                 r, _ = simulate(df, T, tau, pol_f())
                 rows.append(dict(trace=kind, T=T, tau=tau, policy=r.policy,
                                  slo=r.slo_attain, goodput=r.goodput,

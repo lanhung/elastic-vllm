@@ -22,12 +22,15 @@ plt.rcParams.update({
 })
 C = {"hpa-gpu": "#D55E00", "keda-queue": "#0072B2", "kv-util": "#009E73",
      "predictive": "#E69F00", "rl-qlearn": "#8C8C8C",
-     "rl-qlearn+parked": "#56B4E9", "park-aware": "#CC79A7", "static": "#999999"}
+     "rl-qlearn+parked": "#56B4E9", "park-aware": "#CC79A7",
+     "pressure-aware": "#332288", "static": "#999999"}
 LBL = {"hpa-gpu": "HPA (GPU util)", "keda-queue": "KEDA (queue)",
        "kv-util": "KV-util (llm-d)", "predictive": "Predictive (Holt)",
        "rl-qlearn": "RL (Q-learning)", "rl-qlearn+parked": "RL + parked signal",
-       "park-aware": "ParkAware (candidate)"}
-POLS = ["hpa-gpu","keda-queue","kv-util","predictive","rl-qlearn","park-aware"]
+       "park-aware": "ParkAware (candidate)",
+       "pressure-aware": "Pressure-aware admission"}
+POLS = ["hpa-gpu", "keda-queue", "kv-util", "predictive", "rl-qlearn",
+        "park-aware", "pressure-aware"]
 
 
 def save(fig, n):
@@ -109,13 +112,14 @@ def f4():
     d = pd.read_csv(RES / "e4_scale_in_damage.csv")
     d = d[d["T"] > 1]
     fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.2))
-    pols = ["hpa-gpu", "keda-queue", "kv-util", "park-aware"]
-    w, x = 0.2, np.arange(len(sorted(d["T"].unique())))
+    pols = ["hpa-gpu", "keda-queue", "kv-util", "park-aware",
+            "pressure-aware"]
+    w, x = 0.16, np.arange(len(sorted(d["T"].unique())))
     Ts = sorted(d["T"].unique())
     for i, pol in enumerate(pols):
         v = [d[(d["T"] == t) & (d.policy == pol)].recomputed_tokens.values[0] / 1e6
              for t in Ts]
-        ax[0].bar(x + (i - 1.5) * w, v, w, color=C[pol], label=LBL[pol])
+        ax[0].bar(x + (i - 2) * w, v, w, color=C[pol], label=LBL[pol])
     ax[0].set_xticks(x); ax[0].set_xticklabels([str(t) for t in Ts])
     ax[0].set_xlabel("turns $T$"); ax[0].set_ylabel("recomputed prefix\n(million tokens)")
     ax[0].legend(fontsize=7)
@@ -146,14 +150,15 @@ def f5():
 def f6():
     d = pd.read_csv(RES / "e6_workload_contrast.csv")
     fig, ax = plt.subplots(figsize=(4.4, 2.3))
-    pols = ["hpa-gpu", "keda-queue", "kv-util", "park-aware"]
+    pols = ["hpa-gpu", "keda-queue", "kv-util", "park-aware",
+            "pressure-aware"]
     groups = [("conv", 1), ("conv", 8), ("code", 1), ("code", 8)]
     labs = ["chat\n$T$=1", "chat\n$T$=8", "coding\n$T$=1", "coding\n$T$=8"]
-    x = np.arange(len(groups)); w = 0.2
+    x = np.arange(len(groups)); w = 0.16
     for i, pol in enumerate(pols):
         v = [d[(d.trace == g) & (d["T"] == t) & (d.policy == pol)].slo.values[0]
              for g, t in groups]
-        ax.bar(x + (i - 1.5) * w, v, w, color=C[pol], label=LBL[pol])
+        ax.bar(x + (i - 2) * w, v, w, color=C[pol], label=LBL[pol])
     ax.set_xticks(x); ax.set_xticklabels(labs)
     ax.set_ylabel("SLO attainment"); ax.set_ylim(0, 1.28)
     ax.legend(ncol=2, fontsize=7, loc="upper center")
@@ -166,8 +171,10 @@ def f7():
     if not path.exists():
         print("   f7 skipped (run exp7_sensitivity.py first)"); return
     d = pd.read_csv(path)
-    fig, ax = plt.subplots(1, 3, figsize=(7.2, 2.1))
-    keys = ["hpa-gpu", "keda-queue", "kv-util", "park-aware"]
+    d = d[d["T"] == 64]
+    fig, ax = plt.subplots(1, 3, figsize=(7.2, 2.45))
+    keys = ["hpa-gpu", "keda-queue", "kv-util", "park-aware",
+            "pressure-aware"]
 
     a = d[d.sweep == "kv_capacity"].sort_values("value")
     for p_ in keys:
@@ -176,7 +183,6 @@ def f7():
                               label=LBL[p_], markersize=3.5)
     ax[0].set_xscale("log"); ax[0].set_xlabel("KV per replica (k tokens)")
     ax[0].set_ylabel("SLO attainment"); ax[0].set_ylim(0, 1.02)
-    ax[0].legend(ncol=2, fontsize=6.5)
 
     b = d[d.sweep == "max_batch"].sort_values("value")
     for p_ in keys:
@@ -188,7 +194,10 @@ def f7():
     c = d[d.sweep == "target"].sort_values("value")
     ax[2].plot(c.value, c.slo, "o-", color=C["park-aware"], markersize=4)
     ax[2].set_xlabel(r"ParkAware target $\theta$"); ax[2].set_ylim(0, 1.02)
-    fig.tight_layout(); save(fig, "f7_sensitivity")
+    handles, labels = ax[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=6.5,
+               bbox_to_anchor=(.5, 1.01))
+    fig.tight_layout(rect=(0, 0, 1, .83)); save(fig, "f7_sensitivity")
 
 
 # --- F8: measurements that calibrate and falsify the model --------------
@@ -227,6 +236,31 @@ def f8():
     fig.tight_layout(); save(fig, "f8_vllm_measured")
 
 
+# --- F9: synthetic high-load stress and pressure-aware admission --------
+def f9():
+    d = pd.read_csv(RES / "e8_high_load.csv")
+    policies = ["static", "hpa-gpu", "kv-util", "park-aware",
+                "pressure-aware"]
+    fig, ax = plt.subplots(1, 2, figsize=(6.8, 2.2))
+    for pol in policies:
+        q = (d[d.policy.str.startswith("static")] if pol == "static"
+             else d[d.policy == pol]).sort_values("load_multiplier")
+        label = "cheapest static" if pol == "static" else LBL[pol]
+        ax[0].plot(q.load_multiplier, q.slo_attain, "o-", color=C[pol],
+                   label=label, markersize=3.5)
+        ax[1].plot(q.load_multiplier, q.gpu_vs_static, "o-", color=C[pol],
+                   markersize=3.5)
+    for a in ax:
+        a.set_xscale("log", base=2)
+        a.set_xticks([1, 2, 4, 8]); a.set_xticklabels(["1", "2", "4", "8"])
+        a.set_xlabel("synthetic load multiplier")
+    ax[0].set_ylabel("SLO attainment"); ax[0].set_ylim(.6, 1.02)
+    ax[0].legend(fontsize=6.5, loc="lower left")
+    ax[1].set_ylabel("GPU-seconds / cheapest static")
+    ax[1].axhline(1, color="#777777", lw=.8, ls=":")
+    fig.tight_layout(); save(fig, "f9_high_load")
+
+
 if __name__ == "__main__":
     print("figures:")
-    f1(); f2(); f3(); f4(); f5(); f6(); f7(); f8()
+    f1(); f2(); f3(); f4(); f5(); f6(); f7(); f8(); f9()

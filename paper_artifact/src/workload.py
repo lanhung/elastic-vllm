@@ -114,7 +114,8 @@ def build_programs(df: pd.DataFrame,
                    think_cv: float = 1.0,
                    seed: int = 20260720,
                    horizon_s: float | None = None,
-                   tool_out_frac: float = 0.15) -> list[Program]:
+                   tool_out_frac: float = 0.15,
+                   load_multiplier: int = 1) -> list[Program]:
     """
     Compose real LLM calls into agent programs.
 
@@ -126,6 +127,11 @@ def build_programs(df: pd.DataFrame,
     latency in published agent measurements is strongly right-skewed, and
     log-normal is the standard fit.  With turns_per_program=1 and
     think_mean_s=0 this returns exactly the original trace.
+
+    ``load_multiplier`` superposes deterministic phase-shifted copies of the
+    trace-derived programs. It is a synthetic stress parameter, not an
+    additional measured trace. Phase shifts avoid synchronised duplicate
+    bursts while preserving each copy's within-trace structure.
     """
     rng = np.random.default_rng(seed)
     if horizon_s is not None:
@@ -162,7 +168,29 @@ def build_programs(df: pd.DataFrame,
                               tool_out_tokens=tool_out))
             c = c + int(gen[j]) + tool_out
         programs.append(Program(pid=i, arrival_s=float(arr[s]), turns=turns))
-    return programs
+    if load_multiplier < 1:
+        raise ValueError("load_multiplier must be >= 1")
+    if load_multiplier == 1 or not programs:
+        return programs
+
+    period = float(horizon_s or max(p.arrival_s for p in programs) or 1.0)
+    expanded = []
+    for copy_idx in range(load_multiplier):
+        phase = copy_idx * period / load_multiplier
+        for p in programs:
+            turns = [Turn(prefill_tokens=t.prefill_tokens,
+                          decode_tokens=t.decode_tokens,
+                          think_s=t.think_s,
+                          tool_out_tokens=t.tool_out_tokens)
+                     for t in p.turns]
+            expanded.append(Program(
+                pid=0,
+                arrival_s=(p.arrival_s + phase) % period,
+                turns=turns))
+    expanded.sort(key=lambda p: p.arrival_s)
+    for pid, p in enumerate(expanded):
+        p.pid = pid
+    return expanded
 
 
 if __name__ == "__main__":

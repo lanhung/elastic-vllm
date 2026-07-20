@@ -2,12 +2,13 @@
 \documentclass[sigconf,nonacm]{acmart}
 \microtypesetup{expansion=false}
 \usepackage{xspace,booktabs,amsmath,amssymb,graphicx}
+\setlength{\emergencystretch}{2em}
 \newcommand{\sys}{\textsc{ParkAware}\xspace}
 \newcommand{\code}[1]{\texttt{\small #1}}
 
 \begin{document}
 
-\title{Parked, but Reclaimable: Measuring the Missing State in\
+\title{Pressure, Not Parking Time: Reclaimable Prefix State in\
 Agentic LLM Autoscaling}
 \author{Anonymous Author(s)}
 \affiliation{\institution{Submission \#xxx}\country{}}
@@ -23,7 +24,7 @@ cache: an immediate reuse may be cheap, but the exported active-KV metric also
 reads zero and new work can evict the prefix.
 
 We report the measurement, correct a trace-driven simulator, and re-evaluate
-seven autoscaling policies. On Qwen2.5-14B, a 32k-token cache miss adds 9.03~s
+eight autoscaling policies. On Qwen2.5-14B, a 32k-token cache miss adds 9.03~s
 relative to a hit, while all eight parked sessions produce zero GPU, running,
 waiting, and active-KV readings in 114 samples. A pressure experiment shows
 that a 16k prefix remains intact behind at most eight concurrent 4k contexts,
@@ -33,15 +34,17 @@ have little independent effect. The same run calibrates batching
 
 The correction reverses the original policy result. Across six agentic points
 on the Azure coding trace, mean SLO attainment is 0.935 for HPA, 0.931 for
-KV-util, and 0.909 for a candidate policy that counts parked programs. Prefix
-pressure, not scale-in alone, dominates recomputation, and the relative order
-changes with cache capacity and batch size. The useful signal is therefore not
-``parked occupancy'' but the uncertain future value and survival probability
-of reclaimable prefixes. We release the falsified version, raw measurements,
-corrected simulator, and negative result together.
+KV-util, and 0.909 for a candidate policy that counts parked programs. Across
+four baseline controllers and four turn-count regimes, 97.03\% of destroyed
+prefix tokens are due to pressure eviction and only 2.97\% to scale-in. Guided
+by this result, a simple pressure-aware admission baseline eliminates pressure
+eviction and reaches 1.0 SLO attainment at 4--8$\times$ synthetic load using
+36--41\% fewer GPU-seconds than HPA, though it remains costlier than the static
+reference. The useful signal is pressure on valuable reclaimable prefixes,
+not idle time alone.
 \end{abstract}
 
-\keywords{LLM serving, agents, autoscaling, prefix cache, negative results}
+\keywords{LLM serving, agents, autoscaling, prefix cache, admission control}
 \maketitle
 
 \section{Introduction}
@@ -76,13 +79,15 @@ The state is neither resident in the resource-accounting sense nor absent in
 the performance sense. It is an opportunistic, evictable option on a future
 cache hit. This distinction changes both the model and the control problem.
 
-This paper makes three contributions. First, it measures the missing state and
-its price on a real vLLM instance. Second, it corrects the simulator to separate
-active allocation from reclaimable prefix content, including token-level
-partial LRU eviction. Third, it reports that the original
-\sys mechanism no longer wins reliably. This is not a weaker confirmation of
-the old claim; it is a reproducible negative result that identifies what a
-future controller must estimate: prefix reuse value under cache pressure.
+This paper makes three contributions. First, it measures the missing state,
+its price, and its survival under time and pressure on a real vLLM instance.
+Second, it corrects the simulator to separate active allocation from
+reclaimable prefix content and shows that pressure eviction accounts for
+97.03\% of baseline prefix destruction. Third, it reports that the original
+\sys mechanism no longer wins reliably and evaluates the data-directed
+alternative: couple admission and scale-out to cache pressure. The result is a
+reproducible falsification followed by a positive, deliberately simple design
+point, rather than a preserved claim after its premise failed.
 
 \section{Workload and Signals}
 
@@ -106,6 +111,8 @@ bursty shape makes it a useful request-level substrate.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figs/f1_trace_contrast.pdf}
+\Description{Bar charts compare context-to-generation ratio, burst dispersion,
+and peak-to-mean arrivals for chat and coding traces.}
 \caption{Measured properties of the two Azure traces.}
 \label{fig:traces}
 \end{figure}
@@ -138,6 +145,8 @@ server logs, and a machine-readable summary.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figs/f8_vllm_measured.pdf}
+\Description{Three panels show native metrics falling to zero while parked,
+cache-hit and miss TTFT by context length, and retained prefix by pressure.}
 \caption{Hardware validation. (a) During tool-call intervals, all three native
 signals drop to zero. (b) Cache loss has a context-proportional TTFT cost.
 (c) A parked prefix survives elapsed time but not sufficient concurrent
@@ -175,8 +184,8 @@ server process starts with a warm host page cache take 38.163, 38.141, and
 
 \subsection{P1: survival under delay and pressure}
 
-We park a 16k-token target, immediately issue
-$N\in\{0,4,8,16,24\}$ distinct 4k-token neighbors, and then wait if necessary
+We park a 16k-token target, immediately issue 0, 4, 8, 16, or 24 distinct
+4k-token neighbors, and then wait if necessary
 so the total park interval reaches the minimum target
 $\tau_{\min}\in\{0,8,32\}$~s before probing. We normalize probe TTFT between
 the same-trial hit and miss to estimate retained prefix fraction. All 45 trials
@@ -211,7 +220,7 @@ on them. On return, the program prefills only the missing part of its prefix.
 
 Defaults use the measured 75,216-token capacity, $k_{1/2}=4.606$, and
 38.155~s process cold start. Jointly fitting V1 and V3 gives a service rate of
-19,607 token-equivalents/s and decode weight 94.28 relative to prefill. Maximum
+19,607 token-equivalents/s and decode weight 94.282 relative to prefill. Maximum
 batch is 32. E7 explicitly sweeps capacity, batch, and policy target.
 
 We simulate 2,400~s of arrivals, exclude a 300~s warm-up from scoring, then
@@ -242,6 +251,13 @@ It is retained unchanged as the direct test of the original idea. Under the
 corrected mechanism, its parked term is a conservative seat reservation, not a
 measurement of pinned memory.
 
+The new pressure-aware baseline instead admits at most eight active turns per
+replica, rejects any placement that would reclaim a parked prefix, and scales
+out on the larger of queued compute demand and total resident-cache pressure.
+The threshold of eight comes directly from P1. This is a deliberately simple
+admission baseline, not an oracle: it does not estimate reuse probability,
+prefix value, or optimal packing.
+
 \section{Results}
 
 \subsection{Parked work is common and natively invisible}
@@ -256,6 +272,8 @@ how often its invisibility is complete.
 \begin{figure}[t]
 \centering
 \includegraphics[width=.78\columnwidth]{figs/f2_parked_fraction.pdf}
+\Description{Lines show the parked-program fraction and the fraction of samples
+where parked work exists while all native signals are zero.}
 \caption{Simulated parked fraction and completely invisible parked intervals
 on a fixed cluster. Reclaimable cache is tracked internally but is not a native
 autoscaling signal.}
@@ -267,9 +285,11 @@ autoscaling signal.}
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figs/f3_main_slo.pdf}
+\Description{Small multiples compare SLO attainment and normalized GPU cost
+across turn counts, tool delays, and autoscaling policies.}
 \caption{SLO attainment and GPU cost relative to the cheapest static
-SLO-meeting cluster. The corrected model yields no universal dynamic-policy
-winner; ParkAware is a candidate baseline, not ``ours'' with a claimed win.}
+SLO-meeting cluster. Pressure-aware admission protects SLO at most points but
+pays for that protection; no dynamic policy dominates on both axes.}
 \label{fig:main}
 \end{figure*}
 
@@ -277,82 +297,136 @@ winner; ParkAware is a candidate baseline, not ``ours'' with a claimed win.}
 \centering\small
 \caption{Mean over the six coding-trace agentic points ($T>1,\tau>0$).}
 \label{tab:main}
-\begin{tabular}{lrr}
+\begin{tabular}{lrrr}
 \toprule
-Policy & SLO attainment & GPU / static \\
+Policy & SLO & GPU / static & SLO / cost \\
 \midrule
-HPA (GPU) & \textbf{0.935} & 1.914 \\
-KEDA (queue) & 0.519 & 0.954 \\
-KV-util & 0.931 & 1.339 \\
-Predictive & 0.692 & 0.925 \\
-RL (Q-learning) & 0.720 & 0.998 \\
-RL + parked & 0.651 & 0.921 \\
-\sys candidate & 0.909 & 1.430 \\
+Pressure admission & \textbf{0.988} & 3.438 & 0.341 \\
+HPA (GPU) & 0.935 & 1.914 & 0.527 \\
+KEDA (queue) & 0.518 & 0.956 & 0.565 \\
+KV-util & 0.931 & 1.339 & 0.765 \\
+Predictive & 0.692 & 0.925 & \textbf{0.854} \\
+RL (Q-learning) & 0.736 & 1.017 & 0.720 \\
+RL + parked & 0.653 & 0.922 & 0.706 \\
+\sys candidate & 0.909 & 1.430 & 0.709 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Table~\ref{tab:main} reverses the uploaded paper's headline. \sys beats HPA
 on three of six agentic points and KV-util on two, but loses in the mean. It
-beats KEDA on five of six, yet usually spends more GPU time. No dynamic policy
+beats KEDA on five of six, yet usually spends more GPU time. Pressure-aware
+admission has the best mean SLO, but its 3.44$\times$ mean cost gives it the
+worst SLO/cost ratio. Predictive has the best mean pointwise SLO/cost ratio
+precisely because it tolerates substantial SLO loss. No dynamic policy
 simultaneously matches the cheapest static SLO configuration and costs less on
-average. The appropriate conclusion is not that native metrics are sufficient:
-rather, a parked count by itself is also insufficient.
+average. Parked count alone and strict cache protection occupy opposite sides
+of an explicit reliability--cost tension.
 
-The result varies by regime. At $(T,\tau)=(4,8)$, HPA attains 1.000 and
-\sys 0.693. At $(16,30)$, \sys attains 1.000 and HPA 0.987. At $(64,8)$,
-KV-util and \sys both attain approximately 1.000 while HPA is 0.764. Such crossovers are
-exactly what a single occupancy proxy should produce when prefix value depends
-on context size, return timing, cache pressure, and service batching.
+The result varies by regime. At $T=4,\tau=8$, HPA attains 1.000 and
+\sys 0.693. At $T=16,\tau=30$, \sys attains 1.000 and HPA 0.987. At
+$T=64,\tau=8$, KV-util and \sys both attain 1.000 while HPA is 0.764 and pressure-aware
+admission is 0.965. Such crossovers are exactly what a single occupancy proxy
+should produce when prefix value depends on context size, return timing, cache
+pressure, and service batching.
 
 \subsection{Pressure dominates scale-in damage}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figs/f4_scalein_damage.pdf}
+\Description{Bars compare recomputed prefix tokens and lines compare SLO
+attainment by turn count for five policies.}
 \caption{Recomputed prefix tokens and SLO on the coding trace. Recompute
 includes partial pressure eviction and cache loss on scale-in.}
 \label{fig:damage}
 \end{figure}
 
-At $T=8,\tau=8$, HPA recomputes 2.56M tokens, of which only 0.218M are
+At $T=8,\tau=8$, HPA recomputes 2.58M tokens, of which only 0.218M are
 attributed to scale-in. KEDA, KV-util, and \sys recompute 9.82M, 6.44M, and
-10.76M tokens respectively; their scale-in components are only 0.532M,
-0.163M, and 0.278M. Thus routine cache pressure is the dominant source of lost
-prefix work in this model. The old equation that charged every parked context
-only when a replica was removed described the wrong mechanism.
+10.76M tokens. Their scale-in components are only 0.532M, 0.163M, and
+0.278M. Aggregated across these four baseline policies at $T=2,4,8,16$,
+pressure eviction accounts for 97.03\% of destroyed
+prefix tokens and scale-in for 2.97\%. The pressure share is 95.74\%, 94.73\%,
+95.97\%, and 98.28\% at the four turn counts, so it is not a single-point
+artifact. This agrees with P1's independent hardware evidence: elapsed time
+barely moves survival while enough neighboring contexts erase it.
+
+Pressure-aware admission eliminates pressure eviction at every E4 point. It
+does not eliminate scale-in loss, and strict protection costs replicas: at
+$T=8$ it attains 1.000 SLO with 11.84k GPU-seconds versus HPA's 0.997 with
+14.34k and KV-util's 0.933 with 5.74k. The old equation that charged every
+parked context only when a replica was removed therefore described the wrong
+dominant mechanism, while a controller that protects every surviving prefix
+can also overpay.
 
 \subsection{Cold start and workload change the ordering}
 
 At the measured 38.155~s process cold start, HPA, KEDA, Predictive, and
 \sys attain 0.997, 0.777, 0.448, and 0.727 at $(T,\tau)=(8,8)$.
-At 180~s they attain 0.650, 0.635, 0.303, and 0.537. The original monotone
-ParkAware advantage does not survive correction: KEDA is best among these four
-at 180~s, and HPA is best at the measured point.
+At 180~s they attain 0.650, 0.635, 0.289, and 0.537. At 300~s KEDA attains
+0.620, exceeding HPA's 0.406 and \sys's 0.249 because its conservative queue
+response avoids some extremely expensive reconstruction. The original
+monotone ParkAware advantage does not survive correction. Pressure admission
+holds 1.000 throughout the sweep, but at 300~s its p99 program latency reaches
+1,005~s and its waste ratio reaches 0.758; SLO protection is not free.
 
 On the conversation trace constructed as $T=8,\tau=8$, HPA attains 1.000,
-KV-util 0.907, and \sys 0.972; KEDA falls to 0.241. On the coding trace at the
-same point, the values are 0.997, 0.933, and 0.727 for the first, third, and
-fourth policies. A program-level policy cannot be evaluated independently of
-the token and arrival distribution beneath the constructed program structure.
+KV-util 0.910, and \sys 0.972; KEDA attains 0.503. On the coding trace at the
+same point, the values are 0.997, 0.933, 0.727, and 0.777, respectively.
+Pressure admission attains 1.000 on both. A program-level policy cannot be
+evaluated independently of the token and arrival distribution beneath the
+constructed program structure.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figs/f5_coldstart.pdf}
+\Description{Two line charts show policy SLO attainment and GPU-seconds as
+replica cold start increases from zero to 300 seconds.}
 \caption{Cold-start sensitivity at $T=8,\tau=8$. The measured 14B point is
 38.155~s; larger values are sensitivity cases, not measurements.}
 \label{fig:cold}
 \end{figure}
 
-\subsection{Sensitivity confirms that no scalar signal is enough}
+\subsection{Sensitivity at realistic trajectory length}
 
-At measured capacity and batch 32, HPA/KV-util/\sys attain
-0.997/0.933/0.727. At batch 16 the same values are
-1.000/0.932/0.940; at batch 64, 0.996/0.828/0.626. Sweeping capacity from
-31k to 500k also changes the ordering, and changing \sys's target from 0.5 to
-0.9 moves its attainment from 0.831 to 0.638. The candidate is sensitive to
-the resource regime and control target, contrary to the original robustness
-claim.
+The original E7 used $T=8$, where HPA leads the four original policies in all
+nine capacity and batch rows (with ties at batch 8). We rerun it at $T=64$,
+closer to long agent trajectories. At measured capacity and batch 32, HPA
+attains 0.764, KV-util and \sys attain 1.000, and pressure admission attains
+0.965. Across the $T=64$ capacity sweep,
+the winner changes: KV-util and \sys lead at 31k, 62k, and measured capacity;
+pressure admission leads at 150k; and HPA, \sys, and pressure admission tie at
+500k. Pressure admission ranges from 0.853 to 1.000. At $T=64$, changing
+\sys's target from 0.5 to 0.9 no longer changes its 1.000 attainment, showing
+that a sensitivity conclusion at $T=8$ does not generalize to longer
+trajectories.
+
+\subsection{High load exposes a useful pressure-control regime}
+
+The base trace is light: its cheapest static SLO configuration uses only
+1--4 replicas over the main sweep. E8 deterministically superposes
+phase-shifted copies of the coding trace at 1, 2, 4, and 8$\times$ load. This is
+a synthetic stress test, not a measured production rate. At $(T,\tau)=(8,8)$,
+the cheapest static reference grows from 3 to 5, 8, and 14 replicas. At
+4$\times$ and 8$\times$, pressure admission attains 1.000 SLO with 1.471 and
+1.526$\times$ static GPU cost. HPA attains 1.000 and 0.994 with 2.477 and
+2.385$\times$ cost, so pressure admission uses 40.6\% and 36.0\% fewer
+GPU-seconds than HPA. It still costs more than static, and its SLO/cost ratio
+does not dominate every lower-SLO policy. The positive result is therefore
+specific: pressure protection is a useful dynamic mechanism under load, not a
+universal cost optimum.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figs/f9_high_load.pdf}
+\Description{Two line charts show SLO and normalized GPU cost as synthetic load
+increases from one to eight times the source trace.}
+\caption{Synthetic load stress at $T=8,\tau=8$. Pressure-aware admission
+protects SLO with less GPU time than HPA at 4--8$\times$, but remains above the
+cheapest static reference.}
+\label{fig:highload}
+\end{figure}
 
 \section{Implications}
 
@@ -369,12 +443,14 @@ recent reuse, and cache competition may predict that value. A raw parked count
 assigns the same value to a 1k prefix and a 32k prefix despite a measured
 56-fold difference in recompute penalty.
 
-\paragraph{Scale-in should be cache-aware, not cache-fearing.}
+\paragraph{Admission is the first pressure-control lever.}
 Scale-in is destructive when it targets a replica with valuable surviving
-prefixes, but keeping a replica for already-evicted or unlikely-to-return state
-wastes capacity. A practical controller should coordinate replica draining
-with prefix placement and eviction metadata rather than prohibit scale-in
-based on program count.
+prefixes, but it explains only 2.97\% of baseline token loss here. Admission
+and placement act before the dominant event: a neighbor reclaiming those
+blocks. A practical controller should reject prefix-destructive placement,
+scale out when the rejected work is worth serving, and still allow low-value
+prefixes to be reclaimed. Our strict baseline implements the first two pieces
+and exposes the cost of omitting the third.
 
 \section{Threats to Validity}
 \label{sec:threats}
@@ -390,15 +466,20 @@ agent identities or tool intervals. Our $T$ and $\tau$ are constructed. Sweeps
 and a $T=1$ control expose, but do not eliminate, this limitation.
 
 \textbf{Simulator rather than cluster replay.} Hardware measurements calibrate
-the mechanism and service curve; E2--E7 are still simulations. The model uses
+the mechanism and service curve; E2--E8 are still simulations. The model uses
 LRU pressure, one model per replica, and simplified placement. Production
 schedulers may migrate, preempt, offload, or explicitly pin cache state.
+
+\textbf{Synthetic high load.} E8 superposes phase-shifted copies of one trace.
+It preserves within-copy request sizes and burst structure but is not an
+independent observation of a busier deployment. Its role is to test whether
+the low-load conclusion persists once static demand reaches 8--14 replicas.
 
 \textbf{Policy implementations.} The policies follow their documented signal
 and standard control forms, but deployment-specific tuning can change results.
 The tabular RL baseline is deliberately conventional, not a claim about all
-learning-based controllers. We present \sys as a falsified candidate rather
-than a production recommendation.
+learning-based controllers. We present \sys as a falsified candidate and
+pressure admission as a data-directed baseline, not production recommendations.
 
 \section{Related Work}
 
@@ -426,13 +507,15 @@ survival and value.
 
 A parked agent does not hard-hold KV in native vLLM, but it may retain a cheap
 path back into execution. That path has measurable value, is invisible to
-native autoscaling metrics, and disappears under cache pressure. Correcting
-this distinction invalidates both our original mechanism and its claimed
-ParkAware advantage. The robust conclusion is narrower and more useful:
-agentic autoscaling needs an explicit signal for reclaimable prefix state and
-its reuse probability. We release the failed assumption and corrected negative
-result so subsequent designs can start from the measured system rather than a
-convenient fiction.
+native autoscaling metrics, and disappears under neighboring cache pressure.
+Correcting this distinction invalidates both our original mechanism and its
+claimed ParkAware advantage. Hardware and simulation then identify the same
+enemy: not elapsed parking time and rarely scale-in, but pressure from admitted
+work. A simple pressure-aware admission baseline eliminates simulated pressure
+eviction and becomes cheaper than HPA under high load, while its static and
+low-load costs expose the remaining value-estimation problem. Agentic
+autoscaling needs explicit reclaimable-prefix state, reuse value, and
+pressure-aware admission---not another idle-time scalar.
 
 \appendix
 \section{Sensitivity Figure}
@@ -440,8 +523,10 @@ convenient fiction.
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/f7_sensitivity.pdf}
-\caption{Sensitivity at $T=8,\tau=8$: KV capacity, maximum batch, and the
-candidate ParkAware target.}
+\Description{Three line charts show SLO sensitivity at 64 turns to KV capacity,
+maximum batch size, and the ParkAware control target.}
+\caption{Sensitivity rerun at $T=64,\tau=8$: KV capacity, maximum batch, and
+the candidate ParkAware target.}
 \label{fig:sensitivity}
 \end{figure}
 

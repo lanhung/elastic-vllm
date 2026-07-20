@@ -156,6 +156,43 @@ class ParkAware(Policy):
 
 
 # ----------------------------------------------------------------------
+class PressureAwareAdmission(Policy):
+    """Protect reclaimable prefixes by coupling scale-out and admission.
+
+    P1 found intact 16k prefixes behind at most eight concurrent 4k
+    neighbours, partial eviction at 16, and complete eviction at 24. This
+    candidate admits at most eight active turns per replica and refuses a
+    placement that would reclaim a parked prefix. Queued work and resident
+    cache pressure trigger scale-out. It is a simple data-directed baseline,
+    not a claim of optimal value-aware scheduling.
+    """
+    name = "pressure-aware"
+    admission_batch = 8
+    protect_reclaimable = True
+
+    def __init__(self, target: float = 0.70, cache_target: float = 0.85,
+                 stabilize_s: float = 300.0):
+        self.target = target
+        self.cache_target = cache_target
+        self.stabilize_s = stabilize_s
+        self._recent: list[tuple[float, int]] = []
+
+    def decide(self, o: Obs) -> int:
+        compute = int(np.ceil(
+            (o.running + o.queued) / (self.admission_batch * self.target)))
+        per_replica = o.kv_capacity / max(1, o.replicas)
+        cache = int(np.ceil(
+            o.cache_resident / max(1.0, per_replica * self.cache_target)))
+        want = max(1, compute, cache)
+        self._recent.append((o.t, want))
+        self._recent = [(t, w) for t, w in self._recent
+                        if t >= o.t - self.stabilize_s]
+        if want < o.replicas:
+            want = max(w for _, w in self._recent)
+        return want
+
+
+# ----------------------------------------------------------------------
 class Oracle(Policy):
     """Offline lower bound.
 

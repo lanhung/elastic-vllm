@@ -28,9 +28,12 @@ See [`results/README.md`](results/README.md) for run provenance and the
 canonical dataset. `python3 analyze_results.py` regenerates the canonical
 summary and the fitted `k_half` value from raw CSVs.
 
-The uploaded E1–E7 study, corrected simulator, P1 integration, regenerated
+The E1–E8 study, corrected simulator, P1 integration, regenerated
 figures, and revised paper are under [`paper_artifact/`](paper_artifact/).
 The hardware measurements falsified the original assumption that parked
-programs reserve KV in native vLLM; the current artifact and paper report the
-corrected negative policy result. The uploaded pre-calibration version remains
-under `paper_artifact/legacy_precalibration/` for provenance.
+programs reserve KV in native vLLM. The current artifact reports both the
+corrected negative ParkAware result and the pressure-aware follow-up: baseline
+prefix loss is dominated by eviction rather than scale-in, and protected
+admission recovers SLO under synthetic high load at an explicit GPU-cost
+premium. The uploaded pre-calibration version remains under
+`paper_artifact/legacy_precalibration/` for provenance.

@@ -206,6 +206,15 @@ class Cluster:
         return (prefill_tokens * self.hw.w_prefill
                 + turn.decode_tokens * self.hw.w_decode)
 
+    def _turn_footprint(self, p: Program) -> int:
+        turn = p.turns[p.turn_idx]
+        return turn.prefill_tokens + turn.decode_tokens + turn.tool_out_tokens
+
+    def _incremental_kv(self, p: Program, r: Replica) -> int:
+        already = (p.cached_tokens if p.replica == r.rid and
+                   p.pid in r.resident else 0)
+        return max(0, self._turn_footprint(p) - already)
+
     def _observe(self, t) -> Obs:
         ready = self._ready_replicas(t)
         kv_cap = max(1, len(ready) * self.hw.kv_capacity)
@@ -235,13 +244,23 @@ class Cluster:
         running_per_replica: dict[int, int] = {}
         for q in self.running.values():
             running_per_replica[q.replica] = running_per_replica.get(q.replica, 0) + 1
+        admission_batch = min(
+            self.hw.max_batch,
+            int(getattr(self.policy, "admission_batch", self.hw.max_batch)))
+        protect = bool(getattr(self.policy, "protect_reclaimable", False))
+
+        def eligible(r: Replica) -> bool:
+            if not r.ready(t) or running_per_replica.get(r.rid, 0) >= admission_batch:
+                return False
+            if protect and r.kv_used + self._incremental_kv(p, r) > self.hw.kv_capacity:
+                return False
+            return True
+
         if p.replica is not None:
             for r in self.replicas:
-                if (r.rid == p.replica and r.ready(t) and
-                        running_per_replica.get(r.rid, 0) < self.hw.max_batch):
+                if r.rid == p.replica and eligible(r):
                     return r
-        ready = [r for r in self._ready_replicas(t)
-                 if running_per_replica.get(r.rid, 0) < self.hw.max_batch]
+        ready = [r for r in self.replicas if eligible(r)]
         if not ready:
             return None
         return min(ready, key=lambda r: (running_per_replica.get(r.rid, 0),
@@ -336,6 +355,14 @@ class Cluster:
                     prefill = max(0, turn.prefill_tokens - p.cached_tokens)
                 else:
                     prefill = turn.prefill_tokens
+                old_replica = p.replica
+                if old_replica is not None and old_replica != r.rid:
+                    for old in self.replicas:
+                        if old.rid == old_replica and p.pid in old.resident:
+                            del old.resident[p.pid]
+                            old.kv_used = sum(
+                                q.cached_tokens for q in old.resident.values())
+                    p.cached_tokens = 0
                 # After turn zero, every missing prefix token was previously
                 # computed and is therefore recomputation, including partial
                 # block-LRU eviction measured by P1.

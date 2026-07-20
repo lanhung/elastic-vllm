@@ -1,4 +1,4 @@
-# Parked, but Reclaimable — artifact
+# Pressure, Not Parking Time — artifact
 
 This artifact combines a real vLLM hardware validation with a calibrated,
 trace-driven study of autoscaling under agentic LLM workloads. The hardware
@@ -16,7 +16,7 @@ original, pre-measurement paper and outputs are retained under
 ```bash
 python3 -m pip install numpy pandas matplotlib
 make data       # no-op when the vendored Azure traces are already present
-make sim        # deterministic E1–E7, about 7 minutes on one CPU core
+make sim        # deterministic E1–E8, about 12 minutes on one CPU core
 make paper      # figures plus paper/parked.pdf (requires pdflatex)
 ```
 
@@ -49,23 +49,34 @@ required for the CPU simulation.
 derivation. It yields 19,606.97 token-equivalents/s and decode weight 94.282
 relative to prefill; these are the defaults used by `src/sim.py`.
 
-## Corrected result
+## Corrected result and pressure-aware follow-up
 
 The corrected simulation does **not** validate the original ParkAware claim.
 Across the six agentic coding-trace points (`T>1`, `tau>0`), mean SLO
 attainment is 0.935 for HPA, 0.931 for KV-util, and 0.909 for the candidate
 ParkAware policy. ParkAware sometimes reduces GPU time, but counting parked
 programs alone is not a stable proxy for either active demand or reclaimable
-cache value. The artifact reports this negative result rather than preserving
-the earlier conclusion after its premise was falsified.
+cache value.
+
+Across four baseline controllers and `T={2,4,8,16}`, pressure eviction causes
+97.03% of destroyed prefix tokens; scale-in causes 2.97%. This simulation
+result agrees with the independent P1 hardware curve. A data-directed
+pressure-aware baseline therefore caps per-replica admission, rejects a
+placement that would reclaim a parked prefix, and scales on compute plus
+resident-cache pressure. It eliminates simulated pressure eviction. In the
+synthetic E8 stress test, it reaches 1.0 SLO at 4× and 8× load with 40.6% and
+36.0% fewer GPU-seconds than HPA, but still costs 1.47× and 1.53× the cheapest
+static references. The artifact reports both the original negative result and
+the bounded positive follow-up.
 
 ## Layout
 
-- `src/`: workload builder, calibrated simulator, policies, E1–E7 drivers,
+- `src/`: workload builder, calibrated simulator, policies, E1–E8 drivers,
   and figure generator.
 - `tests/`: regression tests for invisible parked cache, partial eviction,
-  per-replica batching, and end-of-trace draining.
-- `results/`: regenerated E1–E7 outputs.
+  pressure-safe placement, load amplification, per-replica batching, and
+  end-of-trace draining.
+- `results/`: regenerated E1–E8 outputs.
 - `vllm_measured/`: canonical hardware measurements and summary.
 - `paper/`: corrected paper source and compiled PDF.
 - `legacy_precalibration/`: immutable record of the uploaded original claim.
