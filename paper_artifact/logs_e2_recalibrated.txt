@@ -1,0 +1,9 @@
+
+E2 metric divergence (fixed 8-replica cluster):
+ T  tau  gpu_util_mean  kv_util_mean  cache_resident_util_mean  parked_cache_util_mean  invisible_parked_frac     corr  parked_frac
+ 1  0.0       0.302632      0.026155                  0.026155                0.000000               0.000000 0.660919     0.000000
+ 4  4.0       0.218900      0.012942                  0.060882                0.047939               0.162679 0.849994     0.601379
+ 8  8.0       0.219498      0.014578                  0.161578                0.146999               0.258373 0.763961     0.894730
+16  8.0       0.194976      0.021032                  0.256037                0.235005               0.244019 0.672341     0.929514
+
+total 2s

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+files-elastic.zip
+paper_artifact/paper/*.aux
+paper_artifact/paper/*.log
+paper_artifact/paper/*.out

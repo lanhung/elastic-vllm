@@ -1,0 +1,146 @@
+bash data/get_data.sh
+ok AzureLLMInferenceTrace_code.csv  8819 rows  -> /root/work/elastic/paper_artifact/data/AzureLLMInferenceTrace_code.csv
+ok AzureLLMInferenceTrace_conv.csv  19366 rows  -> /root/work/elastic/paper_artifact/data/AzureLLMInferenceTrace_conv.csv
+cd src && for e in 1 2 3 4 5 6; do python3 run_experiments.py $e; done
+E1 trace characterisation:
+  code  n=8,819 rate=2.57/s ctx/gen=73.4x IoD=71.3 peak/mean=12.76
+  conv  n=19,366 rate=5.53/s ctx/gen=5.5x IoD=4.0 peak/mean=1.78
+
+total 0s
+
+E2 metric divergence (fixed 8-replica cluster):
+ T  tau  gpu_util_mean  kv_util_mean  cache_resident_util_mean  parked_cache_util_mean  invisible_parked_frac     corr  parked_frac
+ 1  0.0       0.302632      0.026155                  0.026155                0.000000               0.000000 0.660919     0.000000
+ 4  4.0       0.219048      0.012912                  0.060830                0.047918               0.161905 0.849568     0.602179
+ 8  8.0       0.218452      0.014509                  0.161176                0.146667               0.261905 0.764879     0.895231
+16  8.0       0.195833      0.021052                  0.255704                0.234652               0.242857 0.671223     0.929300
+
+total 4s
+  T= 1 tau= 0.0 static*= 9 (39s)
+  T= 4 tau= 0.0 static*= 4 (25s)
+  T= 4 tau= 8.0 static*= 4 (25s)
+  T= 4 tau=30.0 static*= 3 (42s)
+  T=16 tau= 0.0 static*= 2 (25s)
+  T=16 tau= 8.0 static*= 3 (30s)
+  T=16 tau=30.0 static*= 3 (32s)
+  T=64 tau= 0.0 static*= 1 (19s)
+  T=64 tau= 8.0 static*= 4 (30s)
+  T=64 tau=30.0 static*= 4 (24s)
+
+E3 wrote 80 rows
+
+total 291s
+
+E4 scale-in damage:
+ T  tau     policy  kills_evict  kills_scalein  evicted_tokens  scalein_tokens  scale_ins  recomputed_tokens  useful_prefill  waste_ratio      slo   gpu_s
+ 1  0.0    hpa-gpu            0              0               0               0          8                  0        15282456     0.000000 0.995678 43403.5
+ 1  0.0 keda-queue            0              0               0               0          7                  0        15282456     0.000000 0.714307 32882.0
+ 1  0.0    kv-util            0              0               0               0          5                  0        15282456     0.000000 0.750224 10742.0
+ 1  0.0 park-aware            0              0               0               0         17                  0        15282456     0.000000 0.463934  7404.0
+ 2  8.0    hpa-gpu          320              9          717925           28641          5             746566         8442181     0.088433 0.999702 29392.0
+ 2  8.0 keda-queue         1724             60         3308006          158748          9            3469062        11164677     0.310718 0.644603 16383.5
+ 2  8.0    kv-util         1255             36         2619595          109868          8            2731771        10427386     0.261980 0.788909  8062.5
+ 2  8.0 park-aware         1791             59         3401411          159988         26            3563707        11259322     0.316512 0.621049  6840.5
+ 4  8.0    hpa-gpu          559             37         1210748           93784          6            1304532         5050191     0.258313 1.000000 18370.5
+ 4  8.0 keda-queue         1989            198         4425965          542016         14            4967981         8713640     0.570138 0.820853 17325.5
+ 4  8.0    kv-util         2308             66         5071005          186120         11            5257125         9002784     0.583944 0.775507  7850.0
+ 4  8.0 park-aware         2871             64         5927513          170086         27            6097599         9843258     0.619470 0.695257  5716.5
+ 8  8.0    hpa-gpu          931             96         1862054          323542         10            2185596         4079378     0.535767 0.999851 16208.0
+ 8  8.0 keda-queue         3470            130         9443172          514498         11            9960917        11854699     0.840251 0.782369  9088.5
+ 8  8.0    kv-util         3231             50         6703502          176168          8            6879670         8773452     0.784146 0.880817  5813.0
+ 8  8.0 park-aware         4287             83        10808042          361290         24           11169332        13063114     0.855028 0.710770  5115.0
+16  8.0    hpa-gpu         1638             47         6799940          264641          9            7064581         8013143     0.881624 0.959427 12629.5
+16  8.0 keda-queue         7569             14        34306590          150432          3           34457022        35405584     0.973209 0.717333  4518.0
+16  8.0    kv-util         3375             30         9958979          206507          9           10165486        11114048     0.914652 0.999553  7403.0
+16  8.0 park-aware         4670             88        16693532          464298         21           17157830        18106392     0.947612 0.924224  6706.0
+
+total 40s
+
+E5 cold-start sensitivity:
+ cold_start_s     policy      slo   gpu_s  p99_prog  goodput    waste
+        0.000    hpa-gpu 1.000000 17638.0   131.130      1.0 0.063616
+        0.000 keda-queue 0.692273  5654.0   211.890      1.0 0.858830
+        0.000 predictive 0.621718  4112.0   192.445      1.0 0.892002
+        0.000 park-aware 0.886635  5562.0   169.965      1.0 0.771539
+       30.000    hpa-gpu 1.000000 15966.0   131.130      1.0 0.487181
+       30.000 keda-queue 0.778789  9176.0   217.540      1.0 0.840980
+       30.000 predictive 0.530131  3809.0   201.815      1.0 0.899117
+       30.000 park-aware 0.775805  5577.5   181.760      1.0 0.829533
+       38.155    hpa-gpu 0.999851 16208.0   131.130      1.0 0.535767
+       38.155 keda-queue 0.782369  9088.5   218.260      1.0 0.840251
+       38.155 predictive 0.521181  3741.5   216.000      1.0 0.899857
+       38.155 park-aware 0.710770  5115.0   191.815      1.0 0.855028
+       90.000    hpa-gpu 0.993138 13813.0   133.815      1.0 0.606221
+       90.000 keda-queue 0.713753 10552.0   245.760      1.0 0.846103
+       90.000 predictive 0.337858  3379.0   258.020      1.0 0.911777
+       90.000 park-aware 0.575925  4639.5   230.205      1.0 0.882297
+      180.000    hpa-gpu 0.605161  3814.0   232.075      1.0 0.893982
+      180.000 keda-queue 0.674374  7082.5   277.075      1.0 0.855612
+      180.000 predictive 0.399165  3282.0   326.630      1.0 0.908658
+      180.000 park-aware 0.643944  3934.5   293.410      1.0 0.886376
+      300.000    hpa-gpu 0.416319  3443.0   394.910      1.0 0.900406
+      300.000 keda-queue 0.624851  7077.0   342.130      1.0 0.865251
+      300.000 predictive 0.275805  3088.5   353.875      1.0 0.914871
+      300.000 park-aware 0.338902  3545.0   294.630      1.0 0.909377
+
+total 18s
+
+E6 code vs conversation:
+trace  T  tau     policy      slo  goodput    gpu_s    waste  kills_scalein
+ code  1  0.0    hpa-gpu 0.995678 1.000000  43403.5 0.000000              0
+ code  1  0.0 keda-queue 0.714307 1.000000  32882.0 0.000000              0
+ code  1  0.0    kv-util 0.750224 1.000000  10742.0 0.000000              0
+ code  1  0.0 park-aware 0.463934 1.000000   7404.0 0.000000              0
+ code  8  8.0    hpa-gpu 0.999851 1.000000  16208.0 0.535767             96
+ code  8  8.0 keda-queue 0.782369 1.000000   9088.5 0.840251            130
+ code  8  8.0    kv-util 0.880817 1.000000   5813.0 0.784146             50
+ code  8  8.0 park-aware 0.710770 1.000000   5115.0 0.855028             83
+ conv  1  0.0    hpa-gpu 0.996937 1.000000 126599.5 0.000000              0
+ conv  1  0.0 keda-queue 1.000000 1.000000  35541.0 0.000000              0
+ conv  1  0.0    kv-util 0.000000 0.039196   2700.0 0.000000              0
+ conv  1  0.0 park-aware 1.000000 1.000000  29310.0 0.000000              0
+ conv  8  8.0    hpa-gpu 1.000000 1.000000 107075.5 0.176271             60
+ conv  8  8.0 keda-queue 0.280405 1.000000  19331.0 0.921238             32
+ conv  8  8.0    kv-util 0.921197 1.000000  30264.5 0.688173            162
+ conv  8  8.0 park-aware 0.973602 1.000000  24829.0 0.459225             37
+
+total 87s
+cd src && python3 exp7_sensitivity.py
+  A kv=31,000
+  A kv=62,000
+  A kv=75,216
+  A kv=150,000
+  A kv=500,000
+  B batch=8
+  B batch=16
+  B batch=32
+  B batch=64
+  C target sweep
+
+wrote /root/work/elastic/paper_artifact/results/e7_sensitivity.csv (41 rows)
+
+=== kv_capacity (SLO attainment) ===
+policy        hpa-gpu  keda-queue  kv-util  park-aware
+label
+150k            1.000       0.806    0.852       0.818
+31k             1.000       0.676    0.941       0.863
+500k            1.000       0.772    0.593       0.832
+62k             0.995       0.739    0.887       0.807
+measured 14B    1.000       0.782    0.881       0.711
+
+=== max_batch (SLO attainment) ===
+policy  hpa-gpu  keda-queue  kv-util  park-aware
+label
+16        1.000       0.858    0.930       0.942
+32        1.000       0.782    0.881       0.711
+64        0.998       0.627    0.796       0.596
+8         1.000       1.000    1.000       1.000
+
+=== target (SLO attainment) ===
+policy  park-aware
+label
+0.5          0.845
+0.6          0.841
+0.7          0.711
+0.8          0.674
+0.9          0.633

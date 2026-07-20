@@ -1,0 +1,5 @@
+# Preserve upstream/raw formatting without treating CRLF records as source
+# whitespace errors during review.
+paper_artifact/data/*.csv -whitespace
+*.log -whitespace
+paper_artifact/paper/acmart.cls -whitespace

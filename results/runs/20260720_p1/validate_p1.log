@@ -1,0 +1,70 @@
+vLLM up at http://127.0.0.1:8002, model=agent-model
+
+[P1] prefix-cache survival
+  P1 tau=   8s N= 8 rep=0 base= 3.75/ 0.13s probe= 0.13s score=1.00 HIT park=  8.0s
+  P1 tau=  32s N= 0 rep=1 base= 3.71/ 0.15s probe= 0.16s score=1.00 HIT park= 32.0s
+  P1 tau=   0s N=24 rep=2 base= 3.71/ 0.15s probe= 3.73s score=0.00 MISS park= 18.1s
+  P1 tau=   8s N= 0 rep=0 base= 3.73/ 0.14s probe= 0.15s score=1.00 HIT park=  8.0s
+  P1 tau=   0s N=16 rep=1 base= 3.75/ 0.14s probe= 1.42s score=0.65 HIT park= 12.2s
+  P1 tau=  32s N=24 rep=1 base= 3.76/ 0.15s probe= 3.72s score=0.01 MISS park= 32.0s
+  P1 tau=   0s N=16 rep=2 base= 3.73/ 0.14s probe= 1.42s score=0.64 HIT park= 12.2s
+  P1 tau=   8s N= 0 rep=1 base= 3.78/ 0.15s probe= 0.16s score=1.00 HIT park=  8.0s
+  P1 tau=   8s N=16 rep=0 base= 3.75/ 0.16s probe= 1.42s score=0.65 HIT park= 12.2s
+  P1 tau=  32s N=24 rep=0 base= 3.76/ 0.14s probe= 3.73s score=0.01 MISS park= 32.0s
+  P1 tau=  32s N= 8 rep=1 base= 3.74/ 0.14s probe= 0.14s score=1.00 HIT park= 32.0s
+  P1 tau=  32s N=16 rep=0 base= 3.72/ 0.15s probe= 1.42s score=0.64 HIT park= 32.0s
+  P1 tau=   8s N=16 rep=2 base= 3.72/ 0.14s probe= 1.41s score=0.64 HIT park= 12.2s
+  P1 tau=   0s N= 8 rep=2 base= 3.76/ 0.15s probe= 0.13s score=1.00 HIT park=  6.1s
+  P1 tau=   0s N= 0 rep=0 base= 3.76/ 0.15s probe= 0.15s score=1.00 HIT park=  0.0s
+  P1 tau=  32s N=24 rep=2 base= 3.77/ 0.15s probe= 3.71s score=0.02 MISS park= 32.0s
+  P1 tau=   8s N= 4 rep=1 base= 3.74/ 0.14s probe= 0.14s score=1.00 HIT park=  8.0s
+  P1 tau=   0s N=24 rep=0 base= 3.76/ 0.14s probe= 3.75s score=0.00 MISS park= 18.3s
+  P1 tau=  32s N= 8 rep=0 base= 3.77/ 0.15s probe= 0.14s score=1.00 HIT park= 32.0s
+  P1 tau=   8s N= 8 rep=1 base= 3.72/ 0.15s probe= 0.13s score=1.00 HIT park=  8.0s
+  P1 tau=   8s N=24 rep=0 base= 3.74/ 0.15s probe= 3.75s score=0.00 MISS park= 18.3s
+  P1 tau=  32s N= 4 rep=2 base= 3.76/ 0.13s probe= 0.14s score=1.00 HIT park= 32.0s
+  P1 tau=   8s N= 4 rep=0 base= 3.73/ 0.14s probe= 0.15s score=1.00 HIT park=  8.0s
+  P1 tau=   0s N= 0 rep=1 base= 3.73/ 0.13s probe= 0.13s score=1.00 HIT park=  0.0s
+  P1 tau=   8s N=24 rep=2 base= 3.73/ 0.14s probe= 3.74s score=0.00 MISS park= 18.3s
+  P1 tau=   8s N= 0 rep=2 base= 3.76/ 0.15s probe= 0.15s score=1.00 HIT park=  8.0s
+  P1 tau=   8s N=24 rep=1 base= 3.74/ 0.14s probe= 3.75s score=0.00 MISS park= 18.3s
+  P1 tau=   0s N= 8 rep=1 base= 3.77/ 0.13s probe= 0.12s score=1.00 HIT park=  6.2s
+  P1 tau=  32s N= 8 rep=2 base= 3.78/ 0.14s probe= 0.14s score=1.00 HIT park= 32.0s
+  P1 tau=  32s N= 0 rep=0 base= 3.72/ 0.11s probe= 0.18s score=0.98 HIT park= 32.0s
+  P1 tau=  32s N= 4 rep=0 base= 3.72/ 0.13s probe= 0.16s score=0.99 HIT park= 32.0s
+  P1 tau=   0s N= 4 rep=2 base= 3.71/ 0.14s probe= 0.15s score=1.00 HIT park=  3.0s
+  P1 tau=   0s N= 0 rep=2 base= 3.72/ 0.14s probe= 0.15s score=1.00 HIT park=  0.0s
+  P1 tau=   0s N=24 rep=1 base= 3.73/ 0.15s probe= 3.72s score=0.00 MISS park= 18.2s
+  P1 tau=  32s N= 0 rep=2 base= 3.74/ 0.13s probe= 0.15s score=1.00 HIT park= 32.0s
+  P1 tau=  32s N=16 rep=1 base= 3.71/ 0.14s probe= 1.42s score=0.64 HIT park= 32.0s
+  P1 tau=   8s N= 8 rep=2 base= 3.70/ 0.14s probe= 0.12s score=1.00 HIT park=  8.0s
+  P1 tau=   0s N= 8 rep=0 base= 3.74/ 0.14s probe= 0.12s score=1.00 HIT park=  6.1s
+  P1 tau=  32s N= 4 rep=1 base= 3.74/ 0.14s probe= 0.16s score=1.00 HIT park= 32.0s
+  P1 tau=   0s N= 4 rep=1 base= 3.73/ 0.14s probe= 0.15s score=1.00 HIT park=  3.0s
+  P1 tau=   0s N= 4 rep=0 base= 3.73/ 0.14s probe= 0.15s score=1.00 HIT park=  3.0s
+  P1 tau=  32s N=16 rep=2 base= 3.76/ 0.15s probe= 1.42s score=0.65 HIT park= 32.0s
+  P1 tau=   8s N=16 rep=1 base= 3.71/ 0.14s probe= 1.41s score=0.64 HIT park= 12.1s
+  P1 tau=   0s N=16 rep=0 base= 3.74/ 0.14s probe= 1.42s score=0.64 HIT park= 12.2s
+  P1 tau=   8s N= 4 rep=2 base= 3.76/ 0.14s probe= 0.15s score=1.00 HIT park=  8.0s
+  -> results_p1_20260720/p1_cache_survival.csv
+
+  --- prefix-cache survival probability ---
+ tau_target_s  neighbours  survival_probability  mean_survival_score  mean_probe_ttft_s  mean_park_actual_s
+          0.0           0                   1.0             0.998416           0.143242            0.000004
+          0.0           4                   1.0             0.998317           0.147426            3.034278
+          0.0           8                   1.0             1.000000           0.121749            6.122473
+          0.0          16                   1.0             0.644579           1.419578           12.203247
+          0.0          24                   0.0             0.001454           3.732429           18.178292
+          8.0           0                   1.0             0.997938           0.153810            8.000082
+          8.0           4                   1.0             0.997398           0.145821            8.000087
+          8.0           8                   1.0             1.000000           0.128024            8.000073
+          8.0          16                   1.0             0.646096           1.413833           12.171953
+          8.0          24                   0.0             0.000000           3.747277           18.307021
+         32.0           0                   1.0             0.991257           0.161147           32.000087
+         32.0           4                   1.0             0.996159           0.150110           32.000081
+         32.0           8                   1.0             1.000000           0.140202           32.000086
+         32.0          16                   1.0             0.644292           1.419332           32.000073
+         32.0          24                   0.0             0.011432           3.723463           32.000075
+  -> results_p1_20260720/p1_cache_survival_summary.csv
+
+done.
