@@ -1,0 +1,57 @@
+vLLM up at http://127.0.0.1:8000, model=agent-model
+
+[V1] prefix cache
+  V1 L=  1000 rep=0 miss= 0.216s hit= 0.053s penalty= 0.164s
+  V1 L=  1000 rep=1 miss= 0.203s hit= 0.051s penalty= 0.151s
+  V1 L=  1000 rep=2 miss= 0.195s hit= 0.054s penalty= 0.140s
+  V1 L=  2000 rep=0 miss= 0.380s hit= 0.058s penalty= 0.322s
+  V1 L=  2000 rep=1 miss= 0.379s hit= 0.063s penalty= 0.316s
+  V1 L=  2000 rep=2 miss= 0.380s hit= 0.058s penalty= 0.322s
+  V1 L=  4000 rep=0 miss= 0.775s hit= 0.073s penalty= 0.702s
+  V1 L=  4000 rep=1 miss= 0.774s hit= 0.072s penalty= 0.701s
+  V1 L=  4000 rep=2 miss= 0.779s hit= 0.066s penalty= 0.713s
+  V1 L=  8000 rep=0 miss= 1.639s hit= 0.100s penalty= 1.540s
+  V1 L=  8000 rep=1 miss= 1.647s hit= 0.098s penalty= 1.549s
+  V1 L=  8000 rep=2 miss= 1.648s hit= 0.103s penalty= 1.546s
+  V1 L= 16000 rep=0 miss= 3.720s hit= 0.139s penalty= 3.581s
+  V1 L= 16000 rep=1 miss= 3.707s hit= 0.137s penalty= 3.570s
+  V1 L= 16000 rep=2 miss= 3.731s hit= 0.147s penalty= 3.584s
+  V1 L= 32000 rep=0 miss= 9.166s hit= 0.215s penalty= 8.952s
+  V1 L= 32000 rep=1 miss= 9.205s hit= 0.216s penalty= 8.989s
+  V1 L= 32000 rep=2 miss= 9.221s hit= 0.211s penalty= 9.010s
+  -> results_vllm/v1_prefix_cache.csv
+
+[V2] parking
+  -> results_vllm/v2_parking_samples.csv
+  -> results_vllm/v2_parking_phases.csv
+
+  --- the three signals the autoscalers read ---
+  during tool calls    GPU=       4.0%  running= 0.12  waiting= 0.00  KV=  0.0%
+  during compute       GPU=      99.4%  running= 6.31  waiting= 0.67  KV= 37.5%
+
+  The claim: during tool calls the two compute-side signals
+  (GPU util, running/waiting) go to ~0 while KV stays high.
+  If that is not what the numbers above show, the paper is wrong.
+
+[V3] batch curve
+  V3 k=  1 rep=0 wall=  2.29s agg=    27.9 tok/s
+  V3 k=  1 rep=1 wall=  2.30s agg=    27.9 tok/s
+  V3 k=  1 rep=2 wall=  2.30s agg=    27.8 tok/s
+  V3 k=  2 rep=0 wall=  2.71s agg=    47.2 tok/s
+  V3 k=  2 rep=1 wall=  2.72s agg=    47.1 tok/s
+  V3 k=  2 rep=2 wall=  2.71s agg=    47.2 tok/s
+  V3 k=  4 rep=0 wall=  3.52s agg=    72.8 tok/s
+  V3 k=  4 rep=1 wall=  3.52s agg=    72.7 tok/s
+  V3 k=  4 rep=2 wall=  3.52s agg=    72.7 tok/s
+  V3 k=  8 rep=0 wall=  5.12s agg=   100.1 tok/s
+  V3 k=  8 rep=1 wall=  5.12s agg=   100.0 tok/s
+  V3 k=  8 rep=2 wall=  5.11s agg=   100.2 tok/s
+  V3 k= 16 rep=0 wall=  8.37s agg=   122.3 tok/s
+  V3 k= 16 rep=1 wall=  8.39s agg=   122.1 tok/s
+  V3 k= 16 rep=2 wall=  8.40s agg=   121.9 tok/s
+  V3 k= 32 rep=0 wall= 15.20s agg=   134.7 tok/s
+  V3 k= 32 rep=1 wall= 15.22s agg=   134.5 tok/s
+  V3 k= 32 rep=2 wall= 15.23s agg=   134.5 tok/s
+  -> results_vllm/v3_batch_curve.csv
+
+done.

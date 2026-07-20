@@ -1,0 +1,16 @@
+venv torch 2.11.0+cu130 cuda 13.0 avail True
+device NVIDIA GeForce RTX 4090 47.4 GB
+>>> downloading Qwen/Qwen2.5-14B-Instruct to /root/autodl-tmp/models
+[33mWarning: `huggingface-cli` is deprecated and no longer works. Use `hf` instead.
+[0m
+[90mHint: `hf` is already installed! Use it directly.
+[0m
+[90mHint: Examples:
+  hf auth login
+  hf download unsloth/gemma-4-31B-it-GGUF
+  hf upload my-cool-model . .
+  hf models ls --search "gemma"
+  hf repos ls --format json
+  hf jobs run python:3.12 python -c 'print("Hello!")'
+  hf --help
+[0m

@@ -1,0 +1,47 @@
+===============================================================
+ PREFLIGHT
+===============================================================
+
+[1] Is this a real GPU or a virtualised slice, and do we get
+    utilisation readings at all?
+
+    name, memory.total [MiB], utilization.gpu [%], driver_version
+    NVIDIA GeForce RTX 4090, 49140 MiB, 0 %, 580.105.08
+
+    OK   utilization.gpu is readable
+
+    processes currently on this GPU:
+      pid, used_gpu_memory [MiB]
+    (if you see PIDs that are not yours, utilisation is shared and
+     nvidia-smi readings will be contaminated by another tenant)
+
+[2] Does the CUDA / torch / vLLM stack actually line up?
+
+    preflight.sh: line 40: python3: command not found
+
+
+    NOTE: vLLM wheels are built against specific torch+CUDA pairs.
+    torch 2.12 / CUDA 13 is very new.  If 'pip install vllm' pulls a
+    wheel that then fails to import, the fix is to pin an older torch
+    in a venv rather than to fight the system one:
+      python3 -m venv ~/autodl-tmp/venv && source ~/autodl-tmp/venv/bin/activate
+      pip install vllm            # let it choose its own torch
+
+[3] Disk.  Weights are the big item; put them on the data disk.
+
+    Filesystem      Size  Used Avail Use% Mounted on
+    overlay          30G   53M   30G   1% /
+    /dev/md0         50G  1.6M   50G   1% /root/autodl-tmp
+
+    A 14B model in bf16 is ~28 GB.  The 30 GB system disk will NOT
+    hold it.  Everything must go to /root/autodl-tmp.
+
+===============================================================
+ VERDICT
+===============================================================
+  VRAM 49140 MiB  -> run Qwen2.5-14B-Instruct (better than 7B:
+                       closer to what agentic serving actually uses)
+  GPU util readable -> V2 can use nvidia-smi AND vLLM metrics
+
+  Next:  bash setup_autodl.sh
+===============================================================

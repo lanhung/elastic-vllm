@@ -1,0 +1,4 @@
+venv torch 2.11.0+cu130 cuda 13.0 avail True
+device NVIDIA GeForce RTX 4090 47.4 GB
+>>> downloading Qwen/Qwen2.5-14B-Instruct to /root/autodl-tmp/models
+Fetching 18 files:   0%|          | 0/18 [00:00<?, ?it/s]

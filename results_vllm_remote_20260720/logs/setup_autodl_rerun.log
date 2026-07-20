@@ -1,0 +1,79 @@
+venv torch 2.11.0+cu130 cuda 13.0 avail True
+device NVIDIA GeForce RTX 4090 47.4 GB
+>>> downloading Qwen/Qwen2.5-14B-Instruct to /root/autodl-tmp/models
+Fetching 18 files:   0%|          | 0/18 [00:00<?, ?it/s]Fetching 18 files:   6%|▌         | 1/18 [00:01<00:27,  1.64s/it]Fetching 18 files:  17%|█▋        | 3/18 [00:02<00:09,  1.51it/s]Fetching 18 files:  33%|███▎      | 6/18 [00:02<00:04,  2.53it/s]Fetching 18 files:  33%|███▎      | 6/18 [00:03<00:07,  1.58it/s]
+Traceback (most recent call last):
+  File "/root/autodl-tmp/venv/bin/hf", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/cli/hf.py", line 128, in main
+    app()
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/click/core.py", line 1569, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/click/core.py", line 1490, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/cli/_cli_utils.py", line 131, in invoke
+    return super().invoke(ctx)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/click/core.py", line 1970, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/click/core.py", line 1353, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/click/core.py", line 907, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/cli/_framework.py", line 365, in handler
+    return func(**call_kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/cli/download.py", line 225, in download
+    _print_result(run_download())
+                  ^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/cli/download.py", line 187, in run_download
+    return snapshot_download(
+           ^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/_snapshot_download.py", line 515, in snapshot_download
+    thread_map(
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/tqdm/contrib/concurrent.py", line 69, in thread_map
+    return _executor_map(ThreadPoolExecutor, fn, *iterables, **tqdm_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/tqdm/contrib/concurrent.py", line 51, in _executor_map
+    return list(tqdm_class(ex.map(fn, *iterables, chunksize=chunksize), **kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/tqdm/std.py", line 1187, in __iter__
+    for obj in iterable:
+  File "/root/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 456, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/root/miniconda3/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/_snapshot_download.py", line 495, in _inner_hf_hub_download
+    hf_hub_download(  # type: ignore
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/file_download.py", line 992, in hf_hub_download
+    return _hf_hub_download_to_local_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/file_download.py", line 1451, in _hf_hub_download_to_local_dir
+    _download_to_tmp_and_move(
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/file_download.py", line 1920, in _download_to_tmp_and_move
+    xet_get(
+  File "/root/autodl-tmp/venv/lib/python3.12/site-packages/huggingface_hub/file_download.py", line 563, in xet_get
+    with session.new_file_download_group(
+RuntimeError: Task error: File reconstruction error: CAS Client Error: Request error: HTTP status client error (401 Unauthorized), domain: https://cas-server.xethub.hf.co/v2/reconstructions/520b35e3f1137df4a8c431bd622aeaf4bc782793b48196a339c5e6480df6d660

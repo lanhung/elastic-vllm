@@ -1,0 +1,9 @@
+venv torch 2.11.0+cu130 cuda 13.0 avail True
+device NVIDIA GeForce RTX 4090 47.4 GB
+>>> downloading Qwen/Qwen2.5-14B-Instruct to /root/autodl-tmp/models
+Fetching 18 files:   0%|          | 0/18 [00:00<?, ?it/s]Fetching 18 files:  39%|███▉      | 7/18 [26:29<41:37, 227.08s/it]Fetching 18 files:  44%|████▍     | 8/18 [27:53<33:48, 202.83s/it]Fetching 18 files:  50%|█████     | 9/18 [31:48<31:22, 209.12s/it]Fetching 18 files: 100%|██████████| 18/18 [31:48<00:00, 106.04s/it]
+[32m✓ Downloaded[0m
+  path: /root/autodl-tmp/models/Qwen2.5-14B-Instruct
+
+ready.  in every new shell:  source /root/autodl-tmp/env.sh
+then:   bash serve.sh   (terminal 1)
