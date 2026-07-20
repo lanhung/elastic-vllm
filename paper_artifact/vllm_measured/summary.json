@@ -123,5 +123,13 @@
     "mean_s": 38.15517790988088,
     "population_stdev_s": 0.009697338862414388,
     "scope": "process cold start with warm host page cache"
+  },
+  "sim_calibration": {
+    "service_rate_token_equiv_s": 19606.969360661857,
+    "prefill_weight": 1.0,
+    "decode_weight": 94.28169254070711,
+    "v3_nominal_context_tokens": 2000,
+    "v3_generated_tokens": 64,
+    "derivation": "service_rate=(1+k_half)/v1_slope_per_token; decode_weight=(gen*service_rate/R-context)/gen"
   }
 }

@@ -218,7 +218,8 @@ def f8():
     ax[1].legend(fontsize=6.5)
 
     for tau, q in p1.groupby("tau_target_s"):
-        ax[2].plot(q.neighbours, q.mean_survival_score, "o-", label=rf"$\tau$={tau:g}s")
+        ax[2].plot(q.neighbours, q.mean_survival_score, "o-",
+                   label=rf"$\tau_{{\min}}$={tau:g}s")
     ax[2].set_xlabel("concurrent 4k-token neighbors")
     ax[2].set_ylabel("retained-prefix fraction")
     ax[2].set_ylim(-.03, 1.05); ax[2].set_title("(c) pressure evicts state")

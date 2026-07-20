@@ -20,7 +20,7 @@ make all       # simulation plus paper
 | `src/run_experiments.py` | E1–E6 |
 | `src/exp7_sensitivity.py` | E7 sensitivity sweeps |
 | `src/make_figs.py` | Results and raw measurements to publication figures |
-| `tests/test_sim.py` | Four mechanism and accounting regression tests |
+| `tests/test_sim.py` | Six mechanism, accounting, calibration, and headline regression tests |
 
 ## Input data
 

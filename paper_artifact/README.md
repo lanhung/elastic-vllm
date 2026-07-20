@@ -38,18 +38,22 @@ Qwen2.5-14B-Instruct on one reported RTX 4090 with 49,140 MiB:
 - V3: the measured batch curve fits `per_seq_rate = R/(k+k_half)` with
   `k_half=4.606` (`R²=0.99995`), not the original assumed value 16.
 - V4: process cold start with a warm host page cache is 38.155 ± 0.010 s.
-- P1: a parked 16k prefix survives delays of 0–32 s when pressure is at most
+- P1: a parked 16k prefix survives minimum park targets of 0–32 s when pressure is at most
   eight concurrent 4k contexts, is about 64.5% retained at 16 neighbors, and
   is fully evicted at 24. Pressure, not elapsed time in this range, dominates.
 
 `vllm_validation/` contains the scripts that produced these data. They are not
 required for the CPU simulation.
 
+`vllm_measured/summary.json` also records the explicit V1/V3 calibration
+derivation. It yields 19,606.97 token-equivalents/s and decode weight 94.282
+relative to prefill; these are the defaults used by `src/sim.py`.
+
 ## Corrected result
 
 The corrected simulation does **not** validate the original ParkAware claim.
 Across the six agentic coding-trace points (`T>1`, `tau>0`), mean SLO
-attainment is 0.941 for KV-util, 0.929 for HPA, and 0.901 for the candidate
+attainment is 0.935 for HPA, 0.931 for KV-util, and 0.909 for the candidate
 ParkAware policy. ParkAware sometimes reduces GPU time, but counting parked
 programs alone is not a stable proxy for either active demand or reclaimable
 cache value. The artifact reports this negative result rather than preserving

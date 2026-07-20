@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 help:
 	@echo "make data   download the Azure traces (CC-BY, ~1 MB)"
-	@echo "make sim    run E1-E7            (~4 min, CPU only, no GPU)"
+	@echo "make sim    run E1-E7            (~7 min, CPU only, no GPU)"
 	@echo "make figs   results/ -> figs/"
 	@echo "make paper  compile parked.pdf"
 	@echo "make all    everything, from nothing"

@@ -1,8 +1,12 @@
 import sys
 import unittest
+import json
 from pathlib import Path
 
+import pandas as pd
+
 SRC = Path(__file__).resolve().parents[1] / "src"
+ARTIFACT = SRC.parent
 sys.path.insert(0, str(SRC))
 
 from policies import Static
@@ -82,6 +86,37 @@ class CacheSemanticsTest(unittest.TestCase):
 
         self.assertEqual(result.n_completed, 1)
         self.assertEqual(result.goodput, 1.0)
+
+    def test_hw_defaults_match_machine_readable_calibration(self):
+        summary = json.loads(
+            (ARTIFACT / "vllm_measured/summary.json").read_text())
+        calibration = summary["sim_calibration"]
+
+        self.assertAlmostEqual(
+            HW().service_rate,
+            calibration["service_rate_token_equiv_s"], places=0)
+        self.assertAlmostEqual(
+            HW().w_decode, calibration["decode_weight"], places=3)
+
+    def test_published_headlines_match_regenerated_results(self):
+        results = ARTIFACT / "results"
+
+        e2 = pd.read_csv(results / "e2_metric_divergence.csv")
+        t8 = e2[(e2["T"] == 8) & (e2["tau"] == 8)].iloc[0]
+        self.assertEqual(round(t8.parked_frac, 3), 0.895)
+        self.assertEqual(round(t8.invisible_parked_frac, 3), 0.276)
+
+        e3 = pd.read_csv(results / "e3_policy_sweep.csv")
+        agentic = e3[(e3.turns_per_program > 1) & (e3.think_mean_s > 0)]
+        means = agentic.groupby("policy").slo_attain.mean()
+        self.assertEqual(round(means["hpa-gpu"], 3), 0.935)
+        self.assertEqual(round(means["kv-util"], 3), 0.931)
+        self.assertEqual(round(means["park-aware"], 3), 0.909)
+
+        e5 = pd.read_csv(results / "e5_coldstart.csv")
+        measured = e5[e5.cold_start_s == 38.155].set_index("policy").slo
+        self.assertEqual(round(measured["hpa-gpu"], 3), 0.997)
+        self.assertEqual(round(measured["park-aware"], 3), 0.727)
 
 
 if __name__ == "__main__":

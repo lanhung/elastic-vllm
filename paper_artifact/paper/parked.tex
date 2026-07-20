@@ -32,8 +32,8 @@ have little independent effect. The same run calibrates batching
 ($k_{1/2}=4.606$) and a 38.155~s process cold start.
 
 The correction reverses the original policy result. Across six agentic points
-on the Azure coding trace, mean SLO attainment is 0.941 for KV-util, 0.929 for
-HPA, and 0.901 for a candidate policy that counts parked programs. Prefix
+on the Azure coding trace, mean SLO attainment is 0.935 for HPA, 0.931 for
+KV-util, and 0.909 for a candidate policy that counts parked programs. Prefix
 pressure, not scale-in alone, dominates recomputation, and the relative order
 changes with cache capacity and batch size. The useful signal is therefore not
 ``parked occupancy'' but the uncertain future value and survival probability
@@ -175,13 +175,17 @@ server process starts with a warm host page cache take 38.163, 38.141, and
 
 \subsection{P1: survival under delay and pressure}
 
-We park a 16k-token target, wait $\tau\in\{0,8,32\}$~s, introduce
-$N\in\{0,4,8,16,24\}$ distinct 4k-token neighbors, and probe the target.
-We normalize probe TTFT between the same-trial hit and miss to estimate retained
-prefix fraction. All 45 trials completed. At $N\le8$, retention is essentially
-one; at $N=16$, it is 0.645; and at $N=24$, it is approximately zero. The
-three delay curves nearly overlap. In this range, allocation pressure rather
-than wall-clock age determines survival.
+We park a 16k-token target, immediately issue
+$N\in\{0,4,8,16,24\}$ distinct 4k-token neighbors, and then wait if necessary
+so the total park interval reaches the minimum target
+$\tau_{\min}\in\{0,8,32\}$~s before probing. We normalize probe TTFT between
+the same-trial hit and miss to estimate retained prefix fraction. All 45 trials
+completed. At $N\le8$, retention is essentially one; at $N=16$, it is 0.645;
+and at $N=24$, it is approximately zero. The pressure work itself takes about
+12.2~s and 18.2~s at $N=16$ and $N=24$, respectively, so it overruns the
+0/8-s minimum targets. Across the distinct elapsed times available at each
+pressure level, allocation pressure rather than wall-clock age determines
+survival in this range.
 
 This result also exposes partial eviction. The measured capacity is 75,216
 tokens; a 16k target plus sixteen 4k neighbors exceeds it by about 4.8k tokens,
@@ -207,7 +211,7 @@ on them. On return, the program prefills only the missing part of its prefix.
 
 Defaults use the measured 75,216-token capacity, $k_{1/2}=4.606$, and
 38.155~s process cold start. Jointly fitting V1 and V3 gives a service rate of
-19,607 token-equivalents/s and decode weight 94.59 relative to prefill. Maximum
+19,607 token-equivalents/s and decode weight 94.28 relative to prefill. Maximum
 batch is 32. E7 explicitly sweeps capacity, batch, and policy target.
 
 We simulate 2,400~s of arrivals, exclude a 300~s warm-up from scoring, then
@@ -243,8 +247,8 @@ measurement of pinned memory.
 \subsection{Parked work is common and natively invisible}
 
 On a fixed eight-replica cluster, the simulated parked fraction is 60.2\% at
-$(T,\tau)=(4,4)$, 89.5\% at $(8,8)$, and 92.9\% at $(16,8)$.
-At those points, respectively 16.2\%, 26.2\%, and 24.3\% of post-warm-up
+$(T,\tau)=(4,4)$, 89.5\% at $(8,8)$, and 93.1\% at $(16,8)$.
+At those points, respectively 16.2\%, 27.6\%, and 24.3\% of post-warm-up
 samples contain parked programs while running, GPU, and active-KV signals are
 all zero. Figure~\ref{fig:parking} distinguishes how much work is parked from
 how often its invisibility is complete.
@@ -277,13 +281,13 @@ winner; ParkAware is a candidate baseline, not ``ours'' with a claimed win.}
 \toprule
 Policy & SLO attainment & GPU / static \\
 \midrule
-HPA (GPU) & 0.929 & 1.836 \\
-KEDA (queue) & 0.623 & 1.002 \\
-KV-util & \textbf{0.941} & 1.321 \\
-Predictive & 0.715 & 0.909 \\
-RL (Q-learning) & 0.680 & 1.019 \\
-RL + parked & 0.619 & 0.894 \\
-\sys candidate & 0.901 & 1.417 \\
+HPA (GPU) & \textbf{0.935} & 1.914 \\
+KEDA (queue) & 0.519 & 0.954 \\
+KV-util & 0.931 & 1.339 \\
+Predictive & 0.692 & 0.925 \\
+RL (Q-learning) & 0.720 & 0.998 \\
+RL + parked & 0.651 & 0.921 \\
+\sys candidate & 0.909 & 1.430 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -296,8 +300,8 @@ average. The appropriate conclusion is not that native metrics are sufficient:
 rather, a parked count by itself is also insufficient.
 
 The result varies by regime. At $(T,\tau)=(4,8)$, HPA attains 1.000 and
-\sys 0.695. At $(16,30)$, \sys attains 1.000 and HPA 0.994. At $(64,8)$,
-KV-util and \sys both attain 1.000 while HPA is 0.792. Such crossovers are
+\sys 0.693. At $(16,30)$, \sys attains 1.000 and HPA 0.987. At $(64,8)$,
+KV-util and \sys both attain approximately 1.000 while HPA is 0.764. Such crossovers are
 exactly what a single occupancy proxy should produce when prefix value depends
 on context size, return timing, cache pressure, and service batching.
 
@@ -311,24 +315,24 @@ includes partial pressure eviction and cache loss on scale-in.}
 \label{fig:damage}
 \end{figure}
 
-At $T=8,\tau=8$, HPA recomputes 2.19M tokens, of which only 0.324M are
-attributed to scale-in. KEDA, KV-util, and \sys recompute 9.96M, 6.88M, and
-11.17M tokens respectively; their scale-in components are only 0.514M,
-0.176M, and 0.361M. Thus routine cache pressure is the dominant source of lost
+At $T=8,\tau=8$, HPA recomputes 2.56M tokens, of which only 0.218M are
+attributed to scale-in. KEDA, KV-util, and \sys recompute 9.82M, 6.44M, and
+10.76M tokens respectively; their scale-in components are only 0.532M,
+0.163M, and 0.278M. Thus routine cache pressure is the dominant source of lost
 prefix work in this model. The old equation that charged every parked context
 only when a replica was removed described the wrong mechanism.
 
 \subsection{Cold start and workload change the ordering}
 
 At the measured 38.155~s process cold start, HPA, KEDA, Predictive, and
-\sys attain 1.000, 0.782, 0.521, and 0.711 at $(T,\tau)=(8,8)$.
-At 180~s they attain 0.605, 0.674, 0.399, and 0.644. The original monotone
+\sys attain 0.997, 0.777, 0.448, and 0.727 at $(T,\tau)=(8,8)$.
+At 180~s they attain 0.650, 0.635, 0.303, and 0.537. The original monotone
 ParkAware advantage does not survive correction: KEDA is best among these four
 at 180~s, and HPA is best at the measured point.
 
 On the conversation trace constructed as $T=8,\tau=8$, HPA attains 1.000,
-KV-util 0.921, and \sys 0.974; KEDA falls to 0.280. On the coding trace at the
-same point, the values are 1.000, 0.881, and 0.711 for the first, third, and
+KV-util 0.907, and \sys 0.972; KEDA falls to 0.241. On the coding trace at the
+same point, the values are 0.997, 0.933, and 0.727 for the first, third, and
 fourth policies. A program-level policy cannot be evaluated independently of
 the token and arrival distribution beneath the constructed program structure.
 
@@ -343,10 +347,10 @@ the token and arrival distribution beneath the constructed program structure.
 \subsection{Sensitivity confirms that no scalar signal is enough}
 
 At measured capacity and batch 32, HPA/KV-util/\sys attain
-1.000/0.881/0.711. At batch 16 the same values are
-1.000/0.930/0.942; at batch 64, 0.998/0.796/0.596. Sweeping capacity from
+0.997/0.933/0.727. At batch 16 the same values are
+1.000/0.932/0.940; at batch 64, 0.996/0.828/0.626. Sweeping capacity from
 31k to 500k also changes the ordering, and changing \sys's target from 0.5 to
-0.9 moves its attainment from 0.845 to 0.633. The candidate is sensitive to
+0.9 moves its attainment from 0.831 to 0.638. The candidate is sensitive to
 the resource regime and control target, contrary to the original robustness
 claim.
 

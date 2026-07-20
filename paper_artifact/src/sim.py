@@ -72,7 +72,7 @@ class HW:
     kv_capacity: int = 75_216         # measured GPU KV cache tokens
     service_rate: float = 19_607.0    # calibrated token-equivalents / s
     w_prefill: float = 1.0
-    w_decode: float = 94.59            # jointly calibrated with V1 and V3
+    w_decode: float = 94.282           # jointly calibrated with V1 and V3
     max_batch: int = 32               # concurrent running turns
     k_half: float = 4.606              # V3 fit, R^2=0.99995
     cold_start_s: float = 38.155       # V4 process cold start, warm page cache

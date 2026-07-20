@@ -28,6 +28,9 @@ Canonical files:
 - V3 fit `per_seq_tok_s = R/(k+k_half)`: R=156.19,
   `k_half=4.606`, R²=0.99995.
 - V4 process cold start with a warm host page cache: 38.155 ± 0.010 s.
+- Joint V1/V3 service calibration: 19,606.97 token-equivalents/s and decode
+  weight 94.282 relative to prefill (the derivation is machine-readable in
+  `canonical_summary.json`).
 
 The earlier `runs/20260720_1604` data remains available for provenance but
 must not be mixed into canonical aggregate statistics.
@@ -35,8 +38,10 @@ must not be mixed into canonical aggregate statistics.
 ## P1 cache-survival run
 
 `runs/20260720_p1` contains all 45 trials measuring whether a parked 16k-token
-prefix survives delays of 0, 8, or 32 seconds under 0, 4, 8, 16, or 24
-concurrent 4k-token neighbors. The canonical aggregate is
+prefix survives minimum total park targets of 0, 8, or 32 seconds under 0, 4,
+8, 16, or 24 concurrent 4k-token neighbors. Neighbors run first and the script
+then waits out any remaining target time; pressure itself therefore overruns
+the 0/8-second targets at 16 and 24 neighbors. The canonical aggregate is
 `results_p1_20260720/p1_cache_survival_summary.csv`:
 
 - 0–8 neighbors: essentially complete retention at every delay;

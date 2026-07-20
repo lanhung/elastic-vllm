@@ -100,26 +100,62 @@ def analyse_v4(path: Path) -> dict:
                 scope="process cold start with warm host page cache")
 
 
+def derive_sim_calibration(v1: dict, v3: dict,
+                           v3_ctx_tokens: int = 2000,
+                           v3_gen_tokens: int = 64) -> dict:
+    """Derive the simulator's work units from the measured service curves.
+
+    With one active sequence, a prefill token takes
+    ``(1 + k_half) / service_rate`` seconds.  V1 measures that slope.  V3's
+    fitted numerator then fixes the relative decode-token weight for its
+    nominal 2k-prefix/64-token workload.
+    """
+    slope_s_per_token = v1["linear_fit"]["slope_s_per_1k_tokens"] / 1000.0
+    k_half = v3["fit"]["k_half"]
+    fitted_rate = v3["fit"]["R"]
+    service_rate = (1.0 + k_half) / slope_s_per_token
+    decode_weight = (
+        v3_gen_tokens * service_rate / fitted_rate - v3_ctx_tokens
+    ) / v3_gen_tokens
+    return dict(
+        service_rate_token_equiv_s=service_rate,
+        prefill_weight=1.0,
+        decode_weight=decode_weight,
+        v3_nominal_context_tokens=v3_ctx_tokens,
+        v3_generated_tokens=v3_gen_tokens,
+        derivation=(
+            "service_rate=(1+k_half)/v1_slope_per_token; "
+            "decode_weight=(gen*service_rate/R-context)/gen"
+        ),
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", type=Path,
                     default=Path("results/runs/20260720_1704"))
     ap.add_argument("--out", type=Path,
                     default=Path("results/canonical_summary.json"))
+    ap.add_argument("--artifact-out", type=Path,
+                    default=Path("paper_artifact/vllm_measured/summary.json"))
     args = ap.parse_args()
 
+    v1 = analyse_v1(args.run / "results_vllm/v1_prefix_cache.csv")
+    v3 = analyse_v3(args.run / "results_vllm/v3_batch_curve.csv")
     summary = dict(
         canonical_run=args.run.name,
-        v1=analyse_v1(args.run / "results_vllm/v1_prefix_cache.csv"),
+        v1=v1,
         v2=analyse_v2(args.run / "results_vllm/v2_parking_samples.csv",
                       args.run / "results_vllm/v2_parking_phases.csv"),
-        v3=analyse_v3(args.run / "results_vllm/v3_batch_curve.csv"),
+        v3=v3,
         v4=analyse_v4(args.run /
-                      "results_vllm_run_20260720_1709/v4_cold_start.csv"))
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(summary, indent=2) + "\n")
+                      "results_vllm_run_20260720_1709/v4_cold_start.csv"),
+        sim_calibration=derive_sim_calibration(v1, v3))
+    for path in (args.out, args.artifact_out):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
-    print(f"-> {args.out}")
+    print(f"-> {args.out}\n-> {args.artifact_out}")
 
 
 if __name__ == "__main__":
