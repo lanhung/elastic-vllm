@@ -206,7 +206,8 @@ def f8():
     v1 = pd.read_csv(raw / "v1_prefix_cache.csv")
     v2 = pd.read_csv(raw / "v2_parking_samples.csv")
     p1 = pd.read_csv(raw / "p1_cache_survival_summary.csv")
-    fig, ax = plt.subplots(1, 3, figsize=(7.2, 2.05))
+    p2 = pd.read_csv(raw / "p2_pressure_admission_summary.csv")
+    fig, ax = plt.subplots(1, 4, figsize=(7.2, 2.05))
 
     # One representative parking cycle: compute-side and active-KV signals
     # all drop together, including vLLM's exported KV usage.
@@ -233,6 +234,17 @@ def f8():
     ax[2].set_ylabel("retained-prefix fraction")
     ax[2].set_ylim(-.03, 1.05); ax[2].set_title("(c) pressure evicts state")
     ax[2].legend(fontsize=6.5)
+
+    p2 = p2.set_index("mode").loc[["uncontrolled", "protected"]]
+    bars = ax[3].bar(["24 at once", "8 + 16"], p2.mean_probe_ttft_s,
+                     color=[C["hpa-gpu"], C["pressure-aware"]], width=.62)
+    ax[3].set_yscale("log"); ax[3].set_ylabel("probe TTFT (s)")
+    ax[3].set_title("(d) admission preserves hit")
+    for bar, survival in zip(bars, p2.survival_probability):
+        ax[3].text(bar.get_x() + bar.get_width()/2, bar.get_height()*1.12,
+                   f"survival {survival:.0%}", ha="center", va="bottom",
+                   fontsize=6.2)
+    ax[3].tick_params(axis="x", labelrotation=18)
     fig.tight_layout(); save(fig, "f8_vllm_measured")
 
 
@@ -241,26 +253,74 @@ def f9():
     d = pd.read_csv(RES / "e8_high_load.csv")
     policies = ["static", "hpa-gpu", "kv-util", "park-aware",
                 "pressure-aware"]
-    fig, ax = plt.subplots(1, 2, figsize=(6.8, 2.2))
-    for pol in policies:
-        q = (d[d.policy.str.startswith("static")] if pol == "static"
-             else d[d.policy == pol]).sort_values("load_multiplier")
-        label = "cheapest static" if pol == "static" else LBL[pol]
-        ax[0].plot(q.load_multiplier, q.slo_attain, "o-", color=C[pol],
-                   label=label, markersize=3.5)
-        ax[1].plot(q.load_multiplier, q.gpu_vs_static, "o-", color=C[pol],
-                   markersize=3.5)
-    for a in ax:
+    fig, ax = plt.subplots(2, 2, figsize=(7.0, 3.7), sharex=True)
+    for row, turns in enumerate((8, 64)):
+        s = d[d.turns_per_program == turns]
+        for pol in policies:
+            q = (s[s.policy.str.startswith("static")] if pol == "static"
+                 else s[s.policy == pol]).sort_values("load_multiplier")
+            label = "cheapest static" if pol == "static" else LBL[pol]
+            ax[row, 0].plot(q.load_multiplier, q.slo_attain, "o-",
+                            color=C[pol], label=label, markersize=3.2)
+            ax[row, 1].plot(q.load_multiplier, q.gpu_vs_static, "o-",
+                            color=C[pol], markersize=3.2)
+        ax[row, 0].set_ylabel(f"$T={turns}$\nSLO attainment")
+        ax[row, 0].set_ylim(.05 if turns == 64 else .3, 1.03)
+        ax[row, 1].set_ylabel("GPU / static")
+        ax[row, 1].axhline(1, color="#777777", lw=.8, ls=":")
+    for a in ax.ravel():
         a.set_xscale("log", base=2)
         a.set_xticks([1, 2, 4, 8]); a.set_xticklabels(["1", "2", "4", "8"])
-        a.set_xlabel("synthetic load multiplier")
-    ax[0].set_ylabel("SLO attainment"); ax[0].set_ylim(.6, 1.02)
-    ax[0].legend(fontsize=6.5, loc="lower left")
-    ax[1].set_ylabel("GPU-seconds / cheapest static")
-    ax[1].axhline(1, color="#777777", lw=.8, ls=":")
-    fig.tight_layout(); save(fig, "f9_high_load")
+    for a in ax[-1]: a.set_xlabel("synthetic load multiplier")
+    handles, labels = ax[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=6.5,
+               bbox_to_anchor=(.5, 1.01))
+    fig.tight_layout(rect=(0, 0, 1, .88)); save(fig, "f9_high_load")
+
+
+# --- F10: admission threshold sensitivity -------------------------------
+def f10():
+    d = pd.read_csv(RES / "e9_admission_sensitivity.csv")
+    fig, ax = plt.subplots(1, 2, figsize=(6.8, 2.25), sharey=True)
+    for a, turns in zip(ax, (8, 64)):
+        for load, q in d[d.turns_per_program == turns].groupby("load_multiplier"):
+            q = q.sort_values("admission_batch")
+            a.plot(q.admission_batch, q.slo_attain, "o-",
+                   label=f"{int(load)}x load", markersize=3.5)
+        a.axvline(8, color=C["pressure-aware"], ls=":", lw=1,
+                  label="P1 limit = 8" if turns == 8 else None)
+        a.axhline(.95, color="#777777", ls="--", lw=.8)
+        a.set_title(f"$T={turns}$"); a.set_xlabel("admission batch per replica")
+        a.set_xticks([4, 6, 8, 10, 12, 14, 16]); a.set_ylim(.9, 1.005)
+    ax[0].set_ylabel("SLO attainment")
+    ax[0].legend(fontsize=6.8, loc="lower right")
+    fig.tight_layout(); save(fig, "f10_admission_sensitivity")
+
+
+# --- F11: queue/recompute/GPU tradeoff relative to HPA ------------------
+def f11():
+    d = pd.read_csv(RES / "e10_queue_tradeoff.csv")
+    d = d[d.policy == "pressure-aware"]
+    fig, ax = plt.subplots(1, 3, figsize=(7.2, 2.15))
+    for turns, q in d.groupby("turns_per_program"):
+        q = q.sort_values("load_multiplier")
+        label = f"$T={int(turns)}$"
+        ax[0].plot(q.load_multiplier, q.queue_delta_s_vs_hpa / 1000,
+                   "o-", label=label, markersize=3.5)
+        ax[1].plot(q.load_multiplier, q.recompute_saved_vs_hpa / 1e6,
+                   "o-", label=label, markersize=3.5)
+        ax[2].plot(q.load_multiplier, q.gpu_saved_pct_vs_hpa * 100,
+                   "o-", label=label, markersize=3.5)
+    ax[0].set_ylabel("extra queue vs HPA\n(thousand seconds)")
+    ax[1].set_ylabel("recompute saved vs HPA\n(million tokens)")
+    ax[2].set_ylabel("GPU saved vs HPA (%)"); ax[2].axhline(0, color="#777", lw=.8)
+    for a in ax:
+        a.set_xscale("log", base=2); a.set_xticks([1,2,4,8])
+        a.set_xticklabels(["1","2","4","8"]); a.set_xlabel("load multiplier")
+    ax[0].legend(fontsize=7)
+    fig.tight_layout(); save(fig, "f11_queue_tradeoff")
 
 
 if __name__ == "__main__":
     print("figures:")
-    f1(); f2(); f3(); f4(); f5(); f6(); f7(); f8(); f9()
+    f1(); f2(); f3(); f4(); f5(); f6(); f7(); f8(); f9(); f10(); f11()

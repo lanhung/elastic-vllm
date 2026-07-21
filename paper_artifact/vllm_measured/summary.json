@@ -124,6 +124,157 @@
     "population_stdev_s": 0.009697338862414388,
     "scope": "process cold start with warm host page cache"
   },
+  "p1": {
+    "target_context_tokens": 16000,
+    "neighbour_context_tokens": 4000,
+    "by_delay_and_pressure": [
+      {
+        "minimum_park_s": 0.0,
+        "neighbours": 0,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9984158521008794,
+        "mean_probe_ttft_s": 0.1432415662954251,
+        "mean_actual_park_s": 3.921488920847575e-06
+      },
+      {
+        "minimum_park_s": 0.0,
+        "neighbours": 4,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9983173827064199,
+        "mean_probe_ttft_s": 0.14742648229002953,
+        "mean_actual_park_s": 3.034278259302179
+      },
+      {
+        "minimum_park_s": 0.0,
+        "neighbours": 8,
+        "survival_probability": 1.0,
+        "mean_survival_score": 1.0,
+        "mean_probe_ttft_s": 0.12174869266649087,
+        "mean_actual_park_s": 6.122473329926531
+      },
+      {
+        "minimum_park_s": 0.0,
+        "neighbours": 16,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.6445786861055579,
+        "mean_probe_ttft_s": 1.4195776761819918,
+        "mean_actual_park_s": 12.203247181450328
+      },
+      {
+        "minimum_park_s": 0.0,
+        "neighbours": 24,
+        "survival_probability": 0.0,
+        "mean_survival_score": 0.001453629156201657,
+        "mean_probe_ttft_s": 3.7324289114524922,
+        "mean_actual_park_s": 18.178291993836563
+      },
+      {
+        "minimum_park_s": 8.0,
+        "neighbours": 0,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9979380140919526,
+        "mean_probe_ttft_s": 0.15381008945405483,
+        "mean_actual_park_s": 8.000081969425082
+      },
+      {
+        "minimum_park_s": 8.0,
+        "neighbours": 4,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9973983874536473,
+        "mean_probe_ttft_s": 0.14582116529345512,
+        "mean_actual_park_s": 8.000086582576236
+      },
+      {
+        "minimum_park_s": 8.0,
+        "neighbours": 8,
+        "survival_probability": 1.0,
+        "mean_survival_score": 1.0,
+        "mean_probe_ttft_s": 0.12802394044895968,
+        "mean_actual_park_s": 8.000073006376624
+      },
+      {
+        "minimum_park_s": 8.0,
+        "neighbours": 16,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.6460959217507843,
+        "mean_probe_ttft_s": 1.4138327085723479,
+        "mean_actual_park_s": 12.171953200673064
+      },
+      {
+        "minimum_park_s": 8.0,
+        "neighbours": 24,
+        "survival_probability": 0.0,
+        "mean_survival_score": 0.0,
+        "mean_probe_ttft_s": 3.7472769444187484,
+        "mean_actual_park_s": 18.307021167129278
+      },
+      {
+        "minimum_park_s": 32.0,
+        "neighbours": 0,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9912573897343112,
+        "mean_probe_ttft_s": 0.16114693072934946,
+        "mean_actual_park_s": 32.00008664218088
+      },
+      {
+        "minimum_park_s": 32.0,
+        "neighbours": 4,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.9961585020545023,
+        "mean_probe_ttft_s": 0.1501100721458594,
+        "mean_actual_park_s": 32.0000811672459
+      },
+      {
+        "minimum_park_s": 32.0,
+        "neighbours": 8,
+        "survival_probability": 1.0,
+        "mean_survival_score": 1.0,
+        "mean_probe_ttft_s": 0.14020210690796375,
+        "mean_actual_park_s": 32.00008558668196
+      },
+      {
+        "minimum_park_s": 32.0,
+        "neighbours": 16,
+        "survival_probability": 1.0,
+        "mean_survival_score": 0.6442917928689907,
+        "mean_probe_ttft_s": 1.4193318951874971,
+        "mean_actual_park_s": 32.00007323982815
+      },
+      {
+        "minimum_park_s": 32.0,
+        "neighbours": 24,
+        "survival_probability": 0.0,
+        "mean_survival_score": 0.01143155971773178,
+        "mean_probe_ttft_s": 3.7234626300632954,
+        "mean_actual_park_s": 32.000075429057084
+      }
+    ]
+  },
+  "p2": {
+    "total_neighbours": 24,
+    "p1_derived_admission_limit": 8,
+    "all_neighbours_eventually_completed": true,
+    "by_mode": [
+      {
+        "mode": "protected",
+        "survival_probability": 1.0,
+        "mean_survival_score": 1.0,
+        "mean_probe_ttft_s": 0.12448917577664058,
+        "mean_pressure_before_probe_s": 6.119696009283264,
+        "mean_deferred_drain_s": 12.226504872242609,
+        "mean_goodput": 1.0
+      },
+      {
+        "mode": "uncontrolled",
+        "survival_probability": 0.0,
+        "mean_survival_score": 0.01828959701743853,
+        "mean_probe_ttft_s": 3.734972777465979,
+        "mean_pressure_before_probe_s": 18.229364469647408,
+        "mean_deferred_drain_s": 2.1966795126597085e-06,
+        "mean_goodput": 1.0
+      }
+    ]
+  },
   "sim_calibration": {
     "service_rate_token_equiv_s": 19606.969360661857,
     "prefill_weight": 1.0,

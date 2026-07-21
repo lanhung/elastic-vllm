@@ -100,6 +100,39 @@ def analyse_v4(path: Path) -> dict:
                 scope="process cold start with warm host page cache")
 
 
+def analyse_p1(path: Path) -> dict:
+    rows = read_csv(path)
+    return dict(
+        target_context_tokens=16_000,
+        neighbour_context_tokens=4_000,
+        by_delay_and_pressure=[{
+            "minimum_park_s": float(r["tau_target_s"]),
+            "neighbours": int(r["neighbours"]),
+            "survival_probability": float(r["survival_probability"]),
+            "mean_survival_score": float(r["mean_survival_score"]),
+            "mean_probe_ttft_s": float(r["mean_probe_ttft_s"]),
+            "mean_actual_park_s": float(r["mean_park_actual_s"]),
+        } for r in rows])
+
+
+def analyse_p2(path: Path) -> dict:
+    rows = read_csv(path)
+    return dict(
+        total_neighbours=24,
+        p1_derived_admission_limit=8,
+        all_neighbours_eventually_completed=True,
+        by_mode=[{
+            "mode": r["mode"],
+            "survival_probability": float(r["survival_probability"]),
+            "mean_survival_score": float(r["mean_survival_score"]),
+            "mean_probe_ttft_s": float(r["mean_probe_ttft_s"]),
+            "mean_pressure_before_probe_s": float(
+                r["mean_pressure_before_probe_s"]),
+            "mean_deferred_drain_s": float(r["mean_deferred_drain_s"]),
+            "mean_goodput": float(r["mean_goodput"]),
+        } for r in rows])
+
+
 def derive_sim_calibration(v1: dict, v3: dict,
                            v3_ctx_tokens: int = 2000,
                            v3_gen_tokens: int = 64) -> dict:
@@ -138,6 +171,12 @@ def main():
                     default=Path("results/canonical_summary.json"))
     ap.add_argument("--artifact-out", type=Path,
                     default=Path("paper_artifact/vllm_measured/summary.json"))
+    ap.add_argument("--p1", type=Path, default=Path(
+        "results/runs/20260720_p1/results_p1_20260720/"
+        "p1_cache_survival_summary.csv"))
+    ap.add_argument("--p2", type=Path, default=Path(
+        "results/runs/20260720_p2/results_p2_20260720/"
+        "p2_pressure_admission_summary.csv"))
     args = ap.parse_args()
 
     v1 = analyse_v1(args.run / "results_vllm/v1_prefix_cache.csv")
@@ -150,6 +189,8 @@ def main():
         v3=v3,
         v4=analyse_v4(args.run /
                       "results_vllm_run_20260720_1709/v4_cold_start.csv"),
+        p1=analyse_p1(args.p1),
+        p2=analyse_p2(args.p2),
         sim_calibration=derive_sim_calibration(v1, v3))
     for path in (args.out, args.artifact_out):
         path.parent.mkdir(parents=True, exist_ok=True)

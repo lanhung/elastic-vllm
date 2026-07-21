@@ -51,3 +51,16 @@ the 0/8-second targets at 16 and 24 neighbors. The canonical aggregate is
 The service used port 8002 so the unrelated wave-height service on port 8000
 was not touched. The exact validation script and server log are stored with
 the run.
+
+## P2 protected-admission run
+
+`runs/20260720_p2` contains six trials comparing two schedules for the same 24
+neighbor requests. Uncontrolled submits all 24 before probing the parked 16k
+target; protected submits the P1-derived limit of eight, probes, and then
+drains the deferred sixteen. The canonical aggregate is
+`results_p2_20260720/p2_pressure_admission_summary.csv`:
+
+- uncontrolled: survival 0, mean probe TTFT 3.735 s, goodput 1;
+- protected: survival 1, mean probe TTFT 0.124 s, goodput 1.
+
+This run also used port 8002 and did not interact with the unrelated service.

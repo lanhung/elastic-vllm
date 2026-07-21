@@ -1,4 +1,4 @@
-# Pressure, Not Parking Time — artifact
+# Your Neighbours, Not Your Autoscaler — artifact
 
 This artifact combines a real vLLM hardware validation with a calibrated,
 trace-driven study of autoscaling under agentic LLM workloads. The hardware
@@ -16,7 +16,8 @@ original, pre-measurement paper and outputs are retained under
 ```bash
 python3 -m pip install numpy pandas matplotlib
 make data       # no-op when the vendored Azure traces are already present
-make sim        # deterministic E1–E8, about 12 minutes on one CPU core
+make sim        # deterministic E1–E10, about 30 minutes on one CPU core
+make sim JOBS=8 # parallelize independent E8/E9 workload points
 make paper      # figures plus paper/parked.pdf (requires pdflatex)
 ```
 
@@ -41,6 +42,9 @@ Qwen2.5-14B-Instruct on one reported RTX 4090 with 49,140 MiB:
 - P1: a parked 16k prefix survives minimum park targets of 0–32 s when pressure is at most
   eight concurrent 4k contexts, is about 64.5% retained at 16 neighbors, and
   is fully evicted at 24. Pressure, not elapsed time in this range, dominates.
+- P2: admitting eight neighbors before the target probe and deferring the
+  remaining sixteen preserves 100% of the prefix at 0.124 s TTFT; admitting
+  all 24 first yields 0% survival and 3.735 s TTFT. Both complete all work.
 
 `vllm_validation/` contains the scripts that produced these data. They are not
 required for the CPU simulation.
@@ -53,30 +57,27 @@ relative to prefill; these are the defaults used by `src/sim.py`.
 
 The corrected simulation does **not** validate the original ParkAware claim.
 Across the six agentic coding-trace points (`T>1`, `tau>0`), mean SLO
-attainment is 0.935 for HPA, 0.931 for KV-util, and 0.909 for the candidate
-ParkAware policy. ParkAware sometimes reduces GPU time, but counting parked
-programs alone is not a stable proxy for either active demand or reclaimable
-cache value.
+attainment is 0.936 for HPA, 0.874 for KV-util, 0.902 for ParkAware, and 0.986
+for pressure-aware admission. The pressure policy uses 2.357× the cheapest
+static GPU budget on average, so it is not a universal cost winner.
 
 Across four baseline controllers and `T={2,4,8,16}`, pressure eviction causes
-97.03% of destroyed prefix tokens; scale-in causes 2.97%. This simulation
-result agrees with the independent P1 hardware curve. A data-directed
-pressure-aware baseline therefore caps per-replica admission, rejects a
-placement that would reclaim a parked prefix, and scales on compute plus
-resident-cache pressure. It eliminates simulated pressure eviction. In the
-synthetic E8 stress test, it reaches 1.0 SLO at 4× and 8× load with 40.6% and
-36.0% fewer GPU-seconds than HPA, but still costs 1.47× and 1.53× the cheapest
-static references. The artifact reports both the original negative result and
-the bounded positive follow-up.
+96.53% of destroyed prefix tokens; scale-in causes 3.47%. E8 contains all 72
+planned rows, including both RL variants and Predictive at `T={8,64}`. At
+`T=8`, 8× load, pressure admission attains 1.000 SLO versus HPA's 0.997 and
+uses 45.6% less GPU. At `T=64`, 8×, it attains 0.991 versus 0.979 and saves
+326M recomputed tokens, but uses 8.2% more GPU. E9 and E10 report admission
+threshold sensitivity and the explicit queue–recompute–GPU exchange. See
+`RESULTS_ANALYSIS.md` for the complete interpretation.
 
 ## Layout
 
-- `src/`: workload builder, calibrated simulator, policies, E1–E8 drivers,
+- `src/`: workload builder, calibrated simulator, policies, E1–E10 drivers,
   and figure generator.
 - `tests/`: regression tests for invisible parked cache, partial eviction,
   pressure-safe placement, load amplification, per-replica batching, and
   end-of-trace draining.
-- `results/`: regenerated E1–E8 outputs.
+- `results/`: regenerated E1–E10 outputs.
 - `vllm_measured/`: canonical hardware measurements and summary.
 - `paper/`: corrected paper source and compiled PDF.
 - `legacy_precalibration/`: immutable record of the uploaded original claim.

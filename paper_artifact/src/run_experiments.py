@@ -38,7 +38,7 @@ RES.mkdir(exist_ok=True)
 HORIZON = 2400.0          # 40 min of the trace
 TRAIN_HORIZON = 1200.0    # disjoint prefix used only to train the RL agent
 RL_EPISODES = 25
-SLO_TARGET = 0.95         # 95% of turns must meet the TTFT SLO
+SLO_TARGET = 0.95         # 95% of turns must meet queue+service slowdown SLO
 SEED = 20260720
 
 
@@ -58,12 +58,14 @@ def simulate(df, T, tau, policy, hw=None, init_replicas=4, horizon=HORIZON,
     return r, c
 
 
-def train_rl(df, T, tau, see_parked=False, hw=None, n0=5):
+def train_rl(df, T, tau, see_parked=False, hw=None, n0=5,
+             load_multiplier=1):
     """Train a Q-learner on a disjoint prefix.  Never scored on this data."""
     q = QLearnScaler(see_parked=see_parked, slo_weight=12.0, eps=0.25)
     for ep in range(RL_EPISODES):
         ps = build_programs(df, turns_per_program=T, think_mean_s=tau,
-                            seed=SEED + 1000 + ep, horizon_s=TRAIN_HORIZON)
+                            seed=SEED + 1000 + ep, horizon_s=TRAIN_HORIZON,
+                            load_multiplier=load_multiplier)
         q.reset_episode()
         Cluster(ps, hw or HW(), SLO(), q, dt=0.5,
                 init_replicas=n0, max_replicas=64, warmup_s=100.0).run(TRAIN_HORIZON)

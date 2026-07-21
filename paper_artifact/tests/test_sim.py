@@ -87,6 +87,21 @@ class CacheSemanticsTest(unittest.TestCase):
         self.assertEqual(result.n_completed, 1)
         self.assertEqual(result.goodput, 1.0)
 
+    def test_slowdown_includes_dispatch_queue_time(self):
+        programs = [Program(pid=i, arrival_s=0.0,
+                            turns=[Turn(prefill_tokens=1000,
+                                        decode_tokens=0, think_s=0.0)])
+                    for i in range(2)]
+        hw = HW(service_rate=1000, w_decode=1, max_batch=1, k_half=0,
+                cold_start_s=0)
+        c = Cluster(programs, hw, SLO(max_slowdown=1.2), Static(1), dt=0.1,
+                    init_replicas=1, warmup_s=0)
+
+        result = c.run(3.0)
+
+        self.assertGreater(result.p99_queue_s, 0.9)
+        self.assertLess(result.slo_attain, 1.0)
+
     def test_hw_defaults_match_machine_readable_calibration(self):
         summary = json.loads(
             (ARTIFACT / "vllm_measured/summary.json").read_text())
@@ -103,22 +118,22 @@ class CacheSemanticsTest(unittest.TestCase):
 
         e2 = pd.read_csv(results / "e2_metric_divergence.csv")
         t8 = e2[(e2["T"] == 8) & (e2["tau"] == 8)].iloc[0]
-        self.assertEqual(round(t8.parked_frac, 3), 0.895)
-        self.assertEqual(round(t8.invisible_parked_frac, 3), 0.276)
+        self.assertEqual(round(t8.parked_frac, 3), 0.884)
+        self.assertEqual(round(t8.invisible_parked_frac, 3), 0.238)
 
         e3 = pd.read_csv(results / "e3_policy_sweep.csv")
         agentic = e3[(e3.turns_per_program > 1) & (e3.think_mean_s > 0)]
         means = agentic.groupby("policy").slo_attain.mean()
-        self.assertEqual(round(means["hpa-gpu"], 3), 0.935)
-        self.assertEqual(round(means["kv-util"], 3), 0.931)
-        self.assertEqual(round(means["park-aware"], 3), 0.909)
-        self.assertEqual(round(means["pressure-aware"], 3), 0.988)
+        self.assertEqual(round(means["hpa-gpu"], 3), 0.936)
+        self.assertEqual(round(means["kv-util"], 3), 0.874)
+        self.assertEqual(round(means["park-aware"], 3), 0.902)
+        self.assertEqual(round(means["pressure-aware"], 3), 0.986)
 
         e4 = pd.read_csv(results / "e4_scale_in_damage.csv")
         baseline = e4[(e4["T"] > 1) & (e4.policy != "pressure-aware")]
         evicted = baseline.evicted_tokens.sum()
         scalein = baseline.scalein_tokens.sum()
-        self.assertEqual(round(evicted / (evicted + scalein), 4), 0.9703)
+        self.assertEqual(round(evicted / (evicted + scalein), 4), 0.9653)
         protected = e4[(e4["T"] > 1) &
                        (e4.policy == "pressure-aware")]
         self.assertEqual(int(protected.evicted_tokens.sum()), 0)
@@ -126,12 +141,34 @@ class CacheSemanticsTest(unittest.TestCase):
         e5 = pd.read_csv(results / "e5_coldstart.csv")
         measured = e5[e5.cold_start_s == 38.155].set_index("policy").slo
         self.assertEqual(round(measured["hpa-gpu"], 3), 0.997)
-        self.assertEqual(round(measured["park-aware"], 3), 0.727)
+        self.assertEqual(round(measured["park-aware"], 3), 0.720)
 
         e8 = pd.read_csv(results / "e8_high_load.csv")
+        self.assertEqual(len(e8), 72)
+        self.assertTrue((e8.groupby(
+            ["turns_per_program", "load_multiplier"]).size() == 9).all())
+        dynamic = set(e8[~e8.policy.str.startswith("static")].policy)
+        self.assertEqual(dynamic, {
+            "hpa-gpu", "keda-queue", "kv-util", "predictive",
+            "rl-qlearn", "rl-qlearn+parked", "park-aware",
+            "pressure-aware",
+        })
         high = e8[(e8.load_multiplier.isin([4, 8])) &
+                  (e8.turns_per_program == 8) &
                   (e8.policy == "pressure-aware")]
-        self.assertTrue((high.slo_attain == 1.0).all())
+        self.assertTrue((high.slo_attain >= 0.999).all())
+        pressure = e8[e8.policy == "pressure-aware"]
+        self.assertTrue((pressure.goodput == 1.0).all())
+
+        e9 = pd.read_csv(results / "e9_admission_sensitivity.csv")
+        self.assertEqual(len(e9), 28)
+        self.assertEqual(set(e9.admission_batch), {4, 6, 8, 10, 12, 14, 16})
+        self.assertTrue((e9.kills_evict == 0).all())
+
+        e10 = pd.read_csv(results / "e10_queue_tradeoff.csv")
+        tradeoff = e10[e10.policy == "pressure-aware"]
+        self.assertEqual(len(tradeoff), 8)
+        self.assertTrue((tradeoff.recompute_saved_vs_hpa > 0).all())
 
     def test_load_multiplier_superposes_phase_shifted_trace_copies(self):
         trace = pd.DataFrame({"rel_s": [0.0, 10.0],
@@ -143,6 +180,43 @@ class CacheSemanticsTest(unittest.TestCase):
         self.assertEqual(len(programs), 8)
         self.assertEqual(len({p.pid for p in programs}), 8)
         self.assertTrue(all(0 <= p.arrival_s < 20 for p in programs))
+
+    def test_constructed_programs_respect_validated_context_limit(self):
+        trace = pd.DataFrame({"rel_s": list(range(64)),
+                              "ctx": [7_000] * 64,
+                              "gen": [500] * 64})
+        programs = build_programs(trace, turns_per_program=64,
+                                  think_mean_s=8, horizon_s=64)
+
+        self.assertEqual(len(programs), 1)
+        self.assertLessEqual(
+            max(t.prefill_tokens + t.decode_tokens
+                for t in programs[0].turns),
+            32_768)
+
+    def test_tool_output_is_not_cached_before_next_request(self):
+        p = Program(pid=1, arrival_s=0.0,
+                    turns=[Turn(prefill_tokens=1_000, decode_tokens=100,
+                                think_s=1.0, tool_out_tokens=500)])
+        c = self.cluster()
+
+        self.assertEqual(c._turn_footprint(p), 1_100)
+
+    def test_new_tool_output_is_prefill_but_not_recomputation(self):
+        p = Program(pid=1, arrival_s=0.0,
+                    turns=[Turn(prefill_tokens=1_000, decode_tokens=100,
+                                think_s=0.0, tool_out_tokens=400),
+                           Turn(prefill_tokens=1_500, decode_tokens=100,
+                                think_s=0.0, tool_out_tokens=0)])
+        hw = HW(service_rate=100_000, w_decode=1, k_half=0,
+                cold_start_s=0)
+        c = Cluster([p], hw, SLO(), Static(1), dt=0.1,
+                    init_replicas=1, warmup_s=0)
+
+        result = c.run(10)
+
+        self.assertEqual(result.n_completed, 1)
+        self.assertEqual(result.recomputed_tokens, 0)
 
     def test_pressure_admission_refuses_prefix_destructive_placement(self):
         c = Cluster([], HW(kv_capacity=75_216), SLO(),

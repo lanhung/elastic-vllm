@@ -1,0 +1,3 @@
+mode,survival_probability,mean_survival_score,mean_probe_ttft_s,mean_pressure_before_probe_s,mean_deferred_drain_s,mean_goodput
+protected,1.0,1.0,0.12448917577664058,6.119696009283264,12.226504872242609,1.0
+uncontrolled,0.0,0.01828959701743853,3.734972777465979,18.229364469647408,2.1966795126597085e-06,1.0

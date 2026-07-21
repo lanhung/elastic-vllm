@@ -27,6 +27,10 @@ P1  prefix-cache survival
     -> whether a parked program retains a cheap re-entry path after time
        passes and concurrent neighbours consume the cache.
 
+P2  pressure-aware admission
+    -> compare 24 neighbours admitted before a parked target returns against
+       admitting the P1-derived safe eight and deferring the remaining 16.
+
 USAGE
 -----
   # terminal 1
@@ -462,6 +466,107 @@ def p1_cache_survival(out: Path, taus=(0.0, 8.0, 32.0),
     print(f"  -> {out / 'p1_cache_survival_summary.csv'}")
 
 
+# ----------------------------------------------------------------- P2
+def p2_pressure_admission(out: Path, neighbours: int = 24,
+                          admission_limit: int = 8,
+                          target_ctx: int = 16000,
+                          neighbour_ctx: int = 4000,
+                          reps: int = 3, seed: int = 19):
+    """Validate the pressure-aware admission mechanism on one GPU.
+
+    ``uncontrolled`` submits every neighbour before the target returns.
+    ``protected`` submits only ``admission_limit`` neighbours, probes the
+    returning target, then drains every deferred neighbour. Thus both modes
+    complete the same work; protected admission exchanges cache-destructive
+    work before the return for a client-side queue, matching the controller's
+    reject-and-scale/queue action rather than merely lowering goodput.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not 0 < admission_limit <= neighbours:
+        raise ValueError("admission_limit must be in [1, neighbours]")
+
+    def complete(prompt: str):
+        r = requests.post(
+            f"{BASE}/v1/completions",
+            json={"model": MODEL, "prompt": prompt, "max_tokens": 1,
+                  "temperature": 0.0}, timeout=600)
+        r.raise_for_status()
+        return True
+
+    configs = [(mode, rep) for mode in ("uncontrolled", "protected")
+               for rep in range(reps)]
+    random.Random(seed).shuffle(configs)
+    rows = []
+    for trial, (mode, rep) in enumerate(configs):
+        tag = f"p2t{trial}{mode}r{rep}"
+        target = make_prompt(target_ctx, tag)
+        prompts = [make_prompt(neighbour_ctx, f"{tag}peer{i}")
+                   for i in range(neighbours)]
+
+        miss = ttft(target)
+        time.sleep(0.2)
+        hit = ttft(target)
+
+        admitted = neighbours if mode == "uncontrolled" else admission_limit
+        before = prompts[:admitted]
+        deferred = prompts[admitted:]
+        pressure_start = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=max(1, admitted)) as ex:
+            completed_before = sum(ex.map(complete, before))
+        pressure_s = time.perf_counter() - pressure_start
+
+        probe = ttft(target)
+        drain_start = time.perf_counter()
+        completed_after = 0
+        if deferred:
+            with ThreadPoolExecutor(max_workers=admission_limit) as ex:
+                completed_after = sum(ex.map(complete, deferred))
+        deferred_drain_s = time.perf_counter() - drain_start
+
+        span = miss - hit
+        score = ((miss - probe) / span) if span > 0 else float("nan")
+        if not np.isnan(score):
+            score = float(np.clip(score, 0.0, 1.0))
+        retained = bool(score >= 0.5) if not np.isnan(score) else False
+        completed = completed_before + completed_after
+        rows.append(dict(
+            trial=trial, mode=mode, rep=rep,
+            total_neighbours=neighbours,
+            admitted_before_probe=admitted,
+            deferred_until_after_probe=len(deferred),
+            admission_limit=admission_limit,
+            target_ctx_tokens=target_ctx,
+            neighbour_ctx_tokens=neighbour_ctx,
+            miss_ttft_s=miss, hit_ttft_s=hit, probe_ttft_s=probe,
+            survival_score=score, retained=retained,
+            pressure_before_probe_s=pressure_s,
+            deferred_drain_s=deferred_drain_s,
+            neighbours_completed=completed,
+            goodput=completed / neighbours))
+        state = "HIT" if retained else "MISS"
+        print(f"  P2 {mode:12s} rep={rep} admitted={admitted:2d} "
+              f"deferred={len(deferred):2d} probe={probe:5.2f}s "
+              f"score={score:4.2f} {state} completed={completed}/{neighbours}")
+
+    path = out / "p2_pressure_admission.csv"
+    _save(rows, path)
+    import pandas as pd
+    df = pd.DataFrame(rows)
+    summary = (df.groupby("mode", as_index=False)
+                 .agg(survival_probability=("retained", "mean"),
+                      mean_survival_score=("survival_score", "mean"),
+                      mean_probe_ttft_s=("probe_ttft_s", "mean"),
+                      mean_pressure_before_probe_s=(
+                          "pressure_before_probe_s", "mean"),
+                      mean_deferred_drain_s=("deferred_drain_s", "mean"),
+                      mean_goodput=("goodput", "mean")))
+    summary.to_csv(out / "p2_pressure_admission_summary.csv", index=False)
+    print("\n  --- pressure-aware admission ---")
+    print(summary.to_string(index=False))
+    print(f"  -> {out / 'p2_pressure_admission_summary.csv'}")
+
+
 # -----------------------------------------------------------------
 def _save(rows, path: Path):
     import pandas as pd
@@ -472,7 +577,7 @@ def _save(rows, path: Path):
 
 def main():
     ap = argparse.ArgumentParser()
-    for f in ("all", "v1", "v2", "v3", "v4", "p1"):
+    for f in ("all", "v1", "v2", "v3", "v4", "p1", "p2"):
         ap.add_argument(f"--{f}", action="store_true")
     ap.add_argument("--out", default="results_vllm")
     ap.add_argument("--p1-taus", default="0,8,32",
@@ -482,6 +587,11 @@ def main():
     ap.add_argument("--p1-target-ctx", type=int, default=16000)
     ap.add_argument("--p1-neighbour-ctx", type=int, default=4000)
     ap.add_argument("--p1-reps", type=int, default=3)
+    ap.add_argument("--p2-neighbours", type=int, default=24)
+    ap.add_argument("--p2-admission-limit", type=int, default=8)
+    ap.add_argument("--p2-target-ctx", type=int, default=16000)
+    ap.add_argument("--p2-neighbour-ctx", type=int, default=4000)
+    ap.add_argument("--p2-reps", type=int, default=3)
     a = ap.parse_args()
     out = Path(a.out)
 
@@ -503,6 +613,14 @@ def main():
                           target_ctx=a.p1_target_ctx,
                           neighbour_ctx=a.p1_neighbour_ctx,
                           reps=a.p1_reps)
+    if a.p2:
+        print("\n[P2] pressure-aware admission")
+        p2_pressure_admission(
+            out, neighbours=a.p2_neighbours,
+            admission_limit=a.p2_admission_limit,
+            target_ctx=a.p2_target_ctx,
+            neighbour_ctx=a.p2_neighbour_ctx,
+            reps=a.p2_reps)
     print("\ndone.")
 
 

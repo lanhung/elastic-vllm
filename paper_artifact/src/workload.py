@@ -115,7 +115,8 @@ def build_programs(df: pd.DataFrame,
                    seed: int = 20260720,
                    horizon_s: float | None = None,
                    tool_out_frac: float = 0.15,
-                   load_multiplier: int = 1) -> list[Program]:
+                   load_multiplier: int = 1,
+                   max_context_tokens: int | None = 32_768) -> list[Program]:
     """
     Compose real LLM calls into agent programs.
 
@@ -132,6 +133,11 @@ def build_programs(df: pd.DataFrame,
     trace-derived programs. It is a synthetic stress parameter, not an
     additional measured trace. Phase shifts avoid synchronised duplicate
     bursts while preserving each copy's within-trace structure.
+
+    ``max_context_tokens`` matches the validated server's maximum sequence
+    length. Constructed long trajectories retain the oldest prefix and clip
+    later appended content at that boundary; no simulated request can exceed
+    the hardware configuration it is calibrated against.
     """
     rng = np.random.default_rng(seed)
     if horizon_s is not None:
@@ -160,6 +166,9 @@ def build_programs(df: pd.DataFrame,
         c = int(ctx[s])
         for k, j in enumerate(range(s, e)):
             last = (k == turns_per_program - 1)
+            if max_context_tokens is not None:
+                # vLLM's max sequence length includes prompt and decode.
+                c = min(c, max(1, max_context_tokens - int(gen[j])))
             tool_out = 0 if last else int(
                 rng.lognormal(np.log(max(1.0, tool_out_frac * ctx[s])), 0.8))
             turns.append(Turn(prefill_tokens=c,

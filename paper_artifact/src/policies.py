@@ -167,14 +167,16 @@ class PressureAwareAdmission(Policy):
     not a claim of optimal value-aware scheduling.
     """
     name = "pressure-aware"
-    admission_batch = 8
     protect_reclaimable = True
 
     def __init__(self, target: float = 0.70, cache_target: float = 0.85,
-                 stabilize_s: float = 300.0):
+                 stabilize_s: float = 300.0, admission_batch: int = 8):
+        if admission_batch < 1:
+            raise ValueError("admission_batch must be positive")
         self.target = target
         self.cache_target = cache_target
         self.stabilize_s = stabilize_s
+        self.admission_batch = admission_batch
         self._recent: list[tuple[float, int]] = []
 
     def decide(self, o: Obs) -> int:

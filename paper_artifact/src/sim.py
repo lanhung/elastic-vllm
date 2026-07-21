@@ -32,6 +32,7 @@ Nothing is asserted.
 from __future__ import annotations
 
 import numpy as np
+from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import Callable
 
@@ -81,11 +82,13 @@ class HW:
 
 @dataclass
 class SLO:
-    """SLO on per-turn *slowdown*, the standard metric when service times
-    are heavy-tailed: a turn's latency divided by what that same turn
-    would have taken on an unloaded replica.  An absolute latency bound
-    is meaningless here because turn service times span two orders of
-    magnitude (a 500-token turn and a 30k-token turn are both normal)."""
+    """SLO on end-to-end per-turn *slowdown*.
+
+    Latency runs from the turn becoming ready (initial arrival or tool return)
+    through queueing and service, divided by what that turn would take on an
+    unloaded replica. An absolute bound is unsuitable because turn service
+    times span two orders of magnitude.
+    """
     max_slowdown: float = 3.0
 
 
@@ -116,7 +119,12 @@ class Result:
     p50_program_s: float = 0.0
     p99_program_s: float = 0.0
     p99_slowdown: float = 0.0
-    slo_attain: float = 0.0           # fraction of turns meeting TTFT SLO
+    mean_queue_s: float = 0.0
+    p99_queue_s: float = 0.0
+    p99_service_s: float = 0.0
+    total_queue_s: float = 0.0
+    n_turns_scored: int = 0
+    slo_attain: float = 0.0           # fraction meeting queue+service SLO
     gpu_seconds: float = 0.0
     recomputed_tokens: int = 0
     useful_prefill_tokens: int = 0
@@ -170,7 +178,7 @@ class Cluster:
         self.replicas: list[Replica] = [Replica(i, 0.0) for i in range(init_replicas)]
         self._next_rid = init_replicas
 
-        self.pending: list[Program] = sorted(programs, key=lambda p: p.arrival_s)
+        self.pending = deque(sorted(programs, key=lambda p: p.arrival_s))
         self.queue: list[Program] = []          # waiting for a slot
         self.running: dict[int, Program] = {}   # pid -> program, computing
         self.parked: dict[int, Program] = {}    # pid -> program, in think time
@@ -178,9 +186,12 @@ class Cluster:
 
         self._work_left: dict[int, float] = {}  # pid -> token-equivalents left
         self._turn_start: dict[int, float] = {}
+        self._turn_ready: dict[int, float] = {}
         self._turn_iso: dict[int, float] = {}    # isolated service time
         self._park_until: dict[int, float] = {}
         self.ttfts: list[float] = []
+        self.queue_waits: list[float] = []
+        self.service_lats: list[float] = []
         self.slo_ok = 0
         self.slo_total = 0
         self.unfinished_turns = 0
@@ -208,7 +219,10 @@ class Cluster:
 
     def _turn_footprint(self, p: Program) -> int:
         turn = p.turns[p.turn_idx]
-        return turn.prefill_tokens + turn.decode_tokens + turn.tool_out_tokens
+        # Tool output does not enter the model's KV cache until it is sent as
+        # part of the next request.  Only prompt and generated tokens are
+        # resident when the current request completes.
+        return turn.prefill_tokens + turn.decode_tokens
 
     def _incremental_kv(self, p: Program, r: Replica) -> int:
         already = (p.cached_tokens if p.replica == r.rid and
@@ -239,11 +253,15 @@ class Cluster:
                    gpu_util=n_busy / max(1, len(ready)),
                    kv_util=kv_used / kv_cap)
 
-    def _place(self, p: Program, t) -> Replica | None:
+    def _place(self, p: Program, t,
+               running_per_replica: dict[int, int] | None = None
+               ) -> Replica | None:
         """Prefer the replica already holding this program's KV."""
-        running_per_replica: dict[int, int] = {}
-        for q in self.running.values():
-            running_per_replica[q.replica] = running_per_replica.get(q.replica, 0) + 1
+        if running_per_replica is None:
+            running_per_replica = {}
+            for q in self.running.values():
+                running_per_replica[q.replica] = (
+                    running_per_replica.get(q.replica, 0) + 1)
         admission_batch = min(
             self.hw.max_batch,
             int(getattr(self.policy, "admission_batch", self.hw.max_batch)))
@@ -306,8 +324,12 @@ class Cluster:
         while t < end_s:
             # ---- admissions
             while self.pending and self.pending[0].arrival_s <= t:
-                p = self.pending.pop(0)
+                p = self.pending.popleft()
                 p.start_s = t
+                # The simulator observes arrivals on dt-sized ticks. Start
+                # queue accounting at that observation point so sub-tick
+                # discretisation is not mislabelled as scheduler queueing.
+                self._turn_ready[p.pid] = t
                 self.queue.append(p)
 
             # ---- autoscaler
@@ -338,15 +360,21 @@ class Cluster:
             # ---- unpark
             for pid in [pid for pid, until in self._park_until.items() if until <= t]:
                 p = self.parked.pop(pid)
+                self._turn_ready[pid] = t
                 del self._park_until[pid]
                 self.queue.append(p)
 
             # ---- dispatch
             still_q = []
-            for p in self.queue:
+            running_per_replica: dict[int, int] = {}
+            for active in self.running.values():
+                running_per_replica[active.replica] = (
+                    running_per_replica.get(active.replica, 0) + 1)
+            for queue_idx, p in enumerate(self.queue):
                 if len(self.running) >= len(self._ready_replicas(t)) * self.hw.max_batch:
-                    still_q.append(p); continue
-                r = self._place(p, t)
+                    still_q.extend(self.queue[queue_idx:])
+                    break
+                r = self._place(p, t, running_per_replica)
                 if r is None:
                     still_q.append(p); continue
                 turn = p.turns[p.turn_idx]
@@ -363,19 +391,21 @@ class Cluster:
                             old.kv_used = sum(
                                 q.cached_tokens for q in old.resident.values())
                     p.cached_tokens = 0
-                # After turn zero, every missing prefix token was previously
-                # computed and is therefore recomputation, including partial
-                # block-LRU eviction measured by P1.
+                # Missing input after turn zero contains two different
+                # quantities: newly returned tool output and previously
+                # computed prefix lost from cache. Only the latter is waste.
                 if p.turn_idx > 0 and prefill > 0:
-                    p.recomputed_tokens += prefill
-                    self.recomputed += prefill
+                    new_tool_tokens = p.turns[p.turn_idx - 1].tool_out_tokens
+                    recomputed = max(0, prefill - min(prefill, new_tool_tokens))
+                    p.recomputed_tokens += recomputed
+                    self.recomputed += recomputed
                 self.useful_prefill += prefill
                 p.replica = r.rid
                 p.cache_last_used_s = t
                 r.resident[p.pid] = p
-                # KV footprint after this turn = full transcript so far
-                p.cached_tokens = (turn.prefill_tokens + turn.decode_tokens
-                                   + turn.tool_out_tokens)
+                # The tool result is produced while parked and is therefore
+                # not cached until the next request prefills it.
+                p.cached_tokens = turn.prefill_tokens + turn.decode_tokens
                 r.kv_used = sum(q.cached_tokens for q in r.resident.values())
                 self._evict_if_needed(r, t)
                 w = self._turn_work(turn, prefill)
@@ -384,6 +414,8 @@ class Cluster:
                 # isolated = this turn alone on a replica (k=1)
                 self._turn_iso[p.pid] = w * (1.0 + self.hw.k_half) / self.hw.service_rate
                 self.running[p.pid] = p
+                running_per_replica[r.rid] = (
+                    running_per_replica.get(r.rid, 0) + 1)
             self.queue = still_q
 
             # ---- compute
@@ -405,11 +437,17 @@ class Cluster:
                 p = self.running.pop(pid)
                 p.cache_last_used_s = t
                 del self._work_left[pid]
-                lat = t - self._turn_start.pop(pid)
+                start = self._turn_start.pop(pid)
+                ready_at = self._turn_ready.pop(pid, start)
+                queue_s = max(0.0, start - ready_at)
+                service_s = t - start
+                lat = t - ready_at
                 iso = max(1e-6, self._turn_iso.pop(pid))
                 slowdown = lat / iso
                 if p.arrival_s >= self.warmup_s:
                     self.ttfts.append(slowdown)
+                    self.queue_waits.append(queue_s)
+                    self.service_lats.append(service_s)
                     self.slo_total += 1
                     if slowdown <= self.slo.max_slowdown:
                         self.slo_ok += 1
@@ -433,6 +471,9 @@ class Cluster:
                         self.parked[p.pid] = p
                         self._park_until[p.pid] = t + turn.think_s
                     else:
+                        # Completions are processed after this tick's dispatch;
+                        # the earliest representable next dispatch is t+dt.
+                        self._turn_ready[p.pid] = t + self.dt
                         self.queue.append(p)
 
             if t >= self.warmup_s:
@@ -464,6 +505,10 @@ class Cluster:
         fin = [p for p in self.done if p.arrival_s >= self.warmup_s]
         lat = np.array([p.finish_s - p.start_s for p in fin]) if fin else np.array([0.0])
         tt = np.array(self.ttfts) if self.ttfts else np.array([0.0])
+        queue = (np.array(self.queue_waits) if self.queue_waits
+                 else np.array([0.0]))
+        service = (np.array(self.service_lats) if self.service_lats
+                   else np.array([0.0]))
         hist = np.array(self._replica_hist) if self._replica_hist else np.array([0])
         return Result(
             policy=self.policy.name,
@@ -474,6 +519,11 @@ class Cluster:
             p50_program_s=float(np.percentile(lat, 50)),
             p99_program_s=float(np.percentile(lat, 99)),
             p99_slowdown=float(np.percentile(tt, 99)),
+            mean_queue_s=float(queue.mean()),
+            p99_queue_s=float(np.percentile(queue, 99)),
+            p99_service_s=float(np.percentile(service, 99)),
+            total_queue_s=float(queue.sum()),
+            n_turns_scored=self.slo_total,
             slo_attain=self.slo_ok / max(1, self.slo_total),
             gpu_seconds=self.gpu_seconds,
             recomputed_tokens=self.recomputed,
